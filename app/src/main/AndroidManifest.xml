@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <application
         android:allowBackup="false"
-        android:label="极简屏幕保护"
+        android:label="lock screen"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
             android:name=".MainActivity"
@@ -18,7 +18,7 @@
         </activity>
         <receiver
             android:name=".AdminReceiver"
-            android:label="极简屏幕保护设备管理"
+            android:label="lock screen device admin"
             android:permission="android.permission.BIND_DEVICE_ADMIN"
             android:exported="true">
             <meta-data android:name="android.app.device_admin" android:resource="@xml/device_admin" />
