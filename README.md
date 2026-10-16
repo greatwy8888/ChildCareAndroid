@@ -5,7 +5,7 @@
 - 使用 Google Authenticator 兼容的 TOTP 六位动态密码解锁，时间步长 30 秒，允许前后一个时间步长以容忍少量时钟偏差。
 - 输入正确密码后正常使用手机 40 分钟。
 - 40 分钟到期后尝试重新显示全屏保护界面。
-- 保留 Device Owner / Lock Task 支持；普通安装无法可靠阻止 Home、最近任务或系统设置绕过。
+- Device Owner 模式下启用 Lock Task kiosk，并在保护界面恢复到前台时再次检查锁定状态；Android 9 及以上尝试禁用 Home/最近任务等 Lock Task 系统功能。普通安装无法可靠阻止 Home、最近任务或系统设置绕过。
 
 ## 构建 APK
 GitHub Actions 自动运行 gradle testDebugUnitTest assembleDebug，然后在 Actions → Android APK → 对应运行记录 → Artifacts 下载 ChildCareAndroid-debug，解压得到 app-debug.apk。
@@ -17,7 +17,7 @@ Actions 页面：https://github.com/greatwy8888/ChildCareAndroid/actions
     adb install app-debug.apk
     adb shell dpm set-device-owner com.example.childcare/.AdminReceiver
 
-Device Owner 通常要求设备处于适合配置的初始状态，可能需要恢复出厂设置。恢复出厂设置会清除数据；操作前请备份。不要在没有可用 APK 和恢复方案时重置日常手机。
+Device Owner 通常要求设备处于适合配置的初始状态，可能需要恢复出厂设置。恢复出厂设置会清除数据；操作前请备份。不要在没有可用 APK 和恢复方案时重置日常手机。配置完成后，保护界面才可使用系统级 Lock Task kiosk 限制 Home/最近任务；仅安装 APK 或只授予普通设备管理员权限不够。解锁时应用会退出 Lock Task，40 分钟后重新进入保护界面时再尝试启用。
 
 ## 荣耀手机开机启动排查
 
