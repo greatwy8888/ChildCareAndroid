@@ -204,18 +204,6 @@ class MainActivity : ComponentActivity() {
         moveTaskToBack(true)
     }
 
-    private fun derive(password: String, salt: ByteArray): String {
-        val spec = PBEKeySpec(password.toCharArray(), salt, 120_000, 256)
-        return try {
-            SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
-                .joinToString("") { "%02x".format(it) }
-        } finally { spec.clearPassword() }
-    }
-
-    private fun decodeHex(hex: String): ByteArray = try {
-        if (hex.length % 2 != 0) byteArrayOf() else hex.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
-    } catch (_: Exception) { byteArrayOf() }
-
     private fun admin() = ComponentName(this, AdminReceiver::class.java)
 
     companion object {
