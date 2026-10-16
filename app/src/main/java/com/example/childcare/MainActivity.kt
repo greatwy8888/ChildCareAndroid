@@ -177,10 +177,17 @@ class MainActivity : ComponentActivity() {
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val entered = input.text.toString()
                 val salt = decodeHex(prefs().getString(KEY_SALT, "") ?: "")
                 val expected = prefs().getString(KEY_HASH, "") ?: ""
-                val actual = derive(input.text.toString(), salt)
-                if (salt.isNotEmpty() && MessageDigest.isEqual(expected.toByteArray(), actual.toByteArray())) {
+
+                // Fail closed: never accept an empty input or malformed/missing saved credentials.
+                if (entered.isEmpty() || entered.length < 6 || salt.size != 16 || expected.length != 64) {
+                    input.error = "密码错误"
+                    return@setOnClickListener
+                }
+                val actual = derive(entered, salt)
+                if (MessageDigest.isEqual(expected.toByteArray(Charsets.US_ASCII), actual.toByteArray(Charsets.US_ASCII))) {
                     dialog.dismiss()
                     unlockForFortyMinutes()
                 } else {
