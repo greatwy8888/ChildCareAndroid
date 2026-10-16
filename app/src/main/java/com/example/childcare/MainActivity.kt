@@ -69,6 +69,10 @@ class MainActivity : ComponentActivity() {
             setOnClickListener { verifyParentTotp(forSettings = true) }
         })
         layout.addView(Button(this).apply {
+            text = "选择要统计的游戏（需家长验证码）"
+            setOnClickListener { verifyParentTotp(forGameSelection = true) }
+        })
+        layout.addView(Button(this).apply {
             text = "开始休息 5 分钟倒计时"
             setOnClickListener { showBreakTimer() }
         })
@@ -117,7 +121,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun verifyParentTotp(forSettings: Boolean = false) {
+    private fun verifyParentTotp(forSettings: Boolean = false, forGameSelection: Boolean = false) {
         val input = EditText(this).apply {
             hint = "输入 6 位动态验证码"
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
@@ -144,7 +148,9 @@ class MainActivity : ComponentActivity() {
                         } catch (_: Exception) { false }
                         if (ok) {
                             dialog.dismiss()
-                            if (forSettings) {
+                            if (forGameSelection) {
+                                promptGameSelection()
+                            } else if (forSettings) {
                                 promptDailyUsageThreshold()
                             } else {
                                 android.app.AlertDialog.Builder(this)
@@ -160,6 +166,56 @@ class MainActivity : ComponentActivity() {
                 }
                 dialog.show()
             }
+    }
+
+    private fun promptGameSelection() {
+        if (!hasUsageAccess()) {
+            Toast.makeText(this, "请先授权使用情况访问权限。", Toast.LENGTH_LONG).show()
+            return
+        }
+        val start = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        val usage = (getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager)
+            .queryAndAggregateUsageStats(start, System.currentTimeMillis())
+            .filter { (pkg, stats) -> pkg != packageName && stats.totalTimeInForeground > 0L }
+            .toList()
+            .sortedByDescending { it.second.totalTimeInForeground }
+            .take(40)
+        if (usage.isEmpty()) {
+            Toast.makeText(this, "系统暂未提供今日应用使用记录，请稍后重试。", Toast.LENGTH_LONG).show()
+            return
+        }
+        val labels = usage.map { (pkg, _) ->
+            try {
+                val info = packageManager.getApplicationInfo(pkg, 0)
+                packageManager.getApplicationLabel(info).toString() + "  (" + pkg + ")"
+            } catch (_: Exception) { pkg }
+        }.toTypedArray()
+        val packages = usage.map { it.first }
+        val prefs = getSharedPreferences("usage_settings", MODE_PRIVATE)
+        val selected = prefs.getStringSet(KEY_SELECTED_GAMES, emptySet())?.toMutableSet() ?: mutableSetOf()
+        val checked = BooleanArray(packages.size) { packages[it] in selected }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("选择游戏或需要统计的应用")
+            .setMessage("勾选后仅统计所选应用。列表最多显示今日使用时长较高的 40 个应用；列表中的应用名称由手机系统提供。")
+            .setMultiChoiceItems(labels, checked) { _, which, isChecked ->
+                if (isChecked) selected.add(packages[which]) else selected.remove(packages[which])
+            }
+            .setNegativeButton("取消", null)
+            .setNeutralButton("清空选择") { _, _ ->
+                prefs.edit().remove(KEY_SELECTED_GAMES).apply()
+                refreshStatus()
+            }
+            .setPositiveButton("保存") { _, _ ->
+                prefs.edit().putStringSet(KEY_SELECTED_GAMES, selected.toSet()).apply()
+                refreshStatus()
+                Toast.makeText(this, "已保存所选应用：${selected.size} 个", Toast.LENGTH_LONG).show()
+            }
+            .show()
     }
 
     private fun promptDailyUsageThreshold() {
@@ -253,8 +309,14 @@ class MainActivity : ComponentActivity() {
             set(Calendar.MILLISECOND, 0)
         }.timeInMillis
         val manager = getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-        val totalMs = manager.queryAndAggregateUsageStats(start, now)
-            .values.sumOf { it.totalTimeInForeground.coerceAtLeast(0L) }
+        val usage = manager.queryAndAggregateUsageStats(start, now)
+        val selectedGames = getSharedPreferences("usage_settings", MODE_PRIVATE)
+            .getStringSet(KEY_SELECTED_GAMES, emptySet()) ?: emptySet()
+        val totalMs = if (selectedGames.isNotEmpty()) {
+            selectedGames.sumOf { pkg -> usage[pkg]?.totalTimeInForeground?.coerceAtLeast(0L) ?: 0L }
+        } else {
+            usage.values.sumOf { it.totalTimeInForeground.coerceAtLeast(0L) }
+        }
         val minutes = totalMs / 60_000
         val limit = getSharedPreferences("usage_settings", MODE_PRIVATE)
             .getInt(KEY_DAILY_LIMIT_MINUTES, 120)
@@ -305,5 +367,6 @@ class MainActivity : ComponentActivity() {
     companion object {
         private const val KEY_TOTP_SECRET = "totp_secret_base32"
         private const val KEY_DAILY_LIMIT_MINUTES = "daily_limit_minutes"
+        private const val KEY_SELECTED_GAMES = "selected_game_packages"
     }
 }
