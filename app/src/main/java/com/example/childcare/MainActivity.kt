@@ -7,13 +7,19 @@ import android.content.Intent
 import android.os.Bundle
 import android.os.CountDownTimer
 import android.provider.Settings
+import android.text.InputType
 import android.view.Gravity
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.core.view.setPadding
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
+import java.security.SecureRandom
 import java.util.Calendar
 import java.util.Locale
 
@@ -33,7 +39,7 @@ class MainActivity : ComponentActivity() {
             gravity = Gravity.CENTER
         }, ViewGroup.LayoutParams(-1, ViewGroup.LayoutParams.WRAP_CONTENT))
         layout.addView(TextView(this).apply {
-            text = "当前为普通 APK 原型。可查看系统统计的今日应用前台时长，并启动 5 分钟休息倒计时。普通 APK 无法可靠拦截 Home 键或替代系统锁屏。"
+            text = "普通 APK 原型：查看今日应用前台时长、休息倒计时，并配置家长 TOTP 动态验证码。普通 APK 无法可靠拦截 Home 键或替代系统锁屏。"
             textSize = 16f
             setPadding(0, 24, 0, 24)
         })
@@ -51,6 +57,14 @@ class MainActivity : ComponentActivity() {
             setOnClickListener { refreshStatus() }
         })
         layout.addView(Button(this).apply {
+            text = "设置家长动态密码"
+            setOnClickListener { setupParentTotp() }
+        })
+        layout.addView(Button(this).apply {
+            text = "验证家长动态密码"
+            setOnClickListener { verifyParentTotp() }
+        })
+        layout.addView(Button(this).apply {
             text = "开始休息 5 分钟倒计时"
             setOnClickListener { showBreakTimer() }
         })
@@ -61,6 +75,119 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         if (::status.isInitialized) refreshStatus()
+    }
+
+    private fun securePrefs() = EncryptedSharedPreferences.create(
+        this,
+        "parent_security",
+        MasterKey.Builder(this).setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build(),
+        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+    )
+
+    private fun setupParentTotp() {
+        try {
+            val prefs = securePrefs()
+            if (prefs.contains(KEY_TOTP_SECRET)) {
+                android.app.AlertDialog.Builder(this)
+                    .setTitle("家长动态密码已设置")
+                    .setMessage("本机已保存加密的 TOTP 密钥。如需重新绑定，需要先通过家长验证流程；当前版本暂不支持重置。")
+                    .setPositiveButton("知道了", null)
+                    .show()
+                return
+            }
+            val bytes = ByteArray(20)
+            SecureRandom().nextBytes(bytes)
+            val secret = base32Encode(bytes)
+            prefs.edit().putString(KEY_TOTP_SECRET, secret).apply()
+            android.app.AlertDialog.Builder(this)
+                .setTitle("绑定家长验证器")
+                .setMessage(
+                    "请在家长自己的身份验证器 App 中，手动添加基于时间的一次性密码（TOTP），填写下方密钥：\n\n" +
+                        secret + "\n\n每 30 秒生成一个 6 位验证码。请勿把密钥发给孩子或公开分享。密钥只在本次设置时显示，请先保存好。"
+                )
+                .setPositiveButton("已保存", null)
+                .show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "无法安全保存密钥，请检查设备安全存储。", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun verifyParentTotp() {
+        val input = EditText(this).apply {
+            hint = "输入 6 位动态验证码"
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
+            setSingleLine(true)
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("家长验证")
+            .setMessage("打开家长身份验证器，输入当前 6 位验证码。")
+            .setView(input)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("验证", null)
+            .create().also { dialog ->
+                dialog.setOnShowListener {
+                    dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        val secret = try {
+                            securePrefs().getString(KEY_TOTP_SECRET, null)
+                        } catch (_: Exception) { null }
+                        if (secret == null) {
+                            Toast.makeText(this, "请先设置家长动态密码。", Toast.LENGTH_LONG).show()
+                            return@setOnClickListener
+                        }
+                        val ok = try {
+                            Totp.verify(base32Decode(secret), input.text.toString().trim())
+                        } catch (_: Exception) { false }
+                        if (ok) {
+                            dialog.dismiss()
+                            android.app.AlertDialog.Builder(this)
+                                .setTitle("验证成功")
+                                .setMessage("家长身份验证通过。当前版本仅演示验证码验证，尚未将其接入游戏额度修改或强制锁定流程。")
+                                .setPositiveButton("知道了", null)
+                                .show()
+                        } else {
+                            input.error = "验证码错误或已过期"
+                        }
+                    }
+                }
+                dialog.show()
+            }
+    }
+
+    private fun base32Encode(data: ByteArray): String {
+        val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+        val out = StringBuilder()
+        var buffer = 0
+        var bits = 0
+        for (b in data) {
+            buffer = (buffer shl 8) or (b.toInt() and 0xff)
+            bits += 8
+            while (bits >= 5) {
+                out.append(alphabet[(buffer shr (bits - 5)) and 31])
+                bits -= 5
+            }
+        }
+        if (bits > 0) out.append(alphabet[(buffer shl (5 - bits)) and 31])
+        return out.toString()
+    }
+
+    private fun base32Decode(value: String): ByteArray {
+        val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+        val cleaned = value.uppercase(Locale.US).trim().trimEnd('=').replace(" ", "")
+        val out = ArrayList<Byte>()
+        var buffer = 0
+        var bits = 0
+        for (char in cleaned) {
+            val v = alphabet.indexOf(char)
+            require(v >= 0) { "Invalid Base32 secret" }
+            buffer = (buffer shl 5) or v
+            bits += 5
+            if (bits >= 8) {
+                out.add(((buffer shr (bits - 8)) and 0xff).toByte())
+                bits -= 8
+            }
+        }
+        return out.toByteArray()
     }
 
     private fun hasUsageAccess(): Boolean {
@@ -128,5 +255,9 @@ class MainActivity : ComponentActivity() {
         }
         dialog.setOnDismissListener { timer.cancel() }
         timer.start()
+    }
+
+    companion object {
+        private const val KEY_TOTP_SECRET = "totp_secret_base32"
     }
 }
