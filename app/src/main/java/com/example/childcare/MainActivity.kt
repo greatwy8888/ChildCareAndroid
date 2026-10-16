@@ -46,7 +46,10 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (locked) applyImmersive()
+        if (locked) {
+            applyImmersive()
+            enforceKioskIfManaged()
+        }
     }
 
     @Deprecated("Keep the guard visible while locked")
@@ -69,17 +72,12 @@ class MainActivity : ComponentActivity() {
     private fun showGuard() {
         locked = true
         applyImmersive()
+        enforceKioskIfManaged()
         val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         if (dpm.isDeviceOwnerApp(packageName)) {
             try {
-                dpm.setLockTaskPackages(admin(), arrayOf(packageName))
-                dpm.setStatusBarDisabled(admin(), true)
                 // Only Device Owner can enforce this. A regular APK cannot block system uninstall.
                 dpm.setUninstallBlocked(admin(), packageName, true)
-                if (dpm.isLockTaskPermitted(packageName) &&
-                    (getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) {
-                    startLockTask()
-                }
             } catch (_: Exception) { }
         }
 
@@ -159,6 +157,26 @@ class MainActivity : ComponentActivity() {
             setPadding(0, dp(22), 0, 0)
         }, LinearLayout.LayoutParams(-1, -2))
         setContentView(root)
+    }
+
+    private fun enforceKioskIfManaged() {
+        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        if (!dpm.isDeviceOwnerApp(packageName)) return
+        try {
+            dpm.setLockTaskPackages(admin(), arrayOf(packageName))
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                // Disable Home/Overview and other system UI features while kiosk lock task is active.
+                dpm.setLockTaskFeatures(admin(), DevicePolicyManager.LOCK_TASK_FEATURE_NONE)
+            }
+            dpm.setStatusBarDisabled(admin(), true)
+            val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            if (dpm.isLockTaskPermitted(packageName) &&
+                activityManager.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) {
+                startLockTask()
+            }
+        } catch (_: Exception) {
+            // Keep the guard UI available even if a device policy operation is rejected.
+        }
     }
 
     private fun applyImmersive() {
