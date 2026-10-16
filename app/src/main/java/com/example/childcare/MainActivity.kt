@@ -16,13 +16,10 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
+import android.text.InputFilter
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.setPadding
-import java.security.MessageDigest
-import java.security.SecureRandom
-import javax.crypto.SecretKeyFactory
-import javax.crypto.spec.PBEKeySpec
 
 class MainActivity : ComponentActivity() {
     private var locked = true
@@ -35,16 +32,14 @@ class MainActivity : ComponentActivity() {
             setTurnScreenOn(true)
         }
         showGuard()
-        if (prefs().getString(KEY_HASH, null) == null) showPasswordSetup()
-        else showPasswordPrompt()
+        showPasswordPrompt()
     }
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
         showGuard()
-        if (prefs().getString(KEY_HASH, null) == null) showPasswordSetup()
-        else showPasswordPrompt()
+        showPasswordPrompt()
     }
 
     override fun onResume() {
@@ -54,7 +49,7 @@ class MainActivity : ComponentActivity() {
 
     @Deprecated("Keep the guard visible while locked")
     override fun onBackPressed() {
-        if (locked) Toast.makeText(this, "请输入密码解锁", Toast.LENGTH_SHORT).show()
+        if (locked) Toast.makeText(this, "请输入密码", Toast.LENGTH_SHORT).show()
         else super.onBackPressed()
     }
 
@@ -87,14 +82,14 @@ class MainActivity : ComponentActivity() {
             setTextColor(android.graphics.Color.rgb(145, 198, 255))
         }, LinearLayout.LayoutParams(-1, -2))
         root.addView(TextView(this).apply {
-            text = "休息一下"
-            textSize = 30f
+            text = "王梓淇请休息一会"
+            textSize = 28f
             gravity = Gravity.CENTER
             setTextColor(android.graphics.Color.WHITE)
             setPadding(0, 16, 0, 10)
         }, LinearLayout.LayoutParams(-1, -2))
         root.addView(TextView(this).apply {
-            text = "请输入家长设置的密码继续使用"
+            text = "输入密码继续使用"
             textSize = 16f
             gravity = Gravity.CENTER
             setTextColor(android.graphics.Color.rgb(194, 207, 231))
@@ -114,63 +109,16 @@ class MainActivity : ComponentActivity() {
             )
     }
 
-    private fun showPasswordSetup() {
-        val password = EditText(this).apply {
-            hint = "设置家长密码（至少 6 位）"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setSingleLine(true)
-        }
-        val confirm = EditText(this).apply {
-            hint = "再次输入密码"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            setSingleLine(true)
-        }
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(24)
-            addView(password)
-            addView(confirm)
-        }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("首次设置家长密码")
-            .setMessage("密码只保存为本机派生摘要，请家长妥善保管。")
-            .setView(box)
-            .setCancelable(false)
-            .setPositiveButton("保存", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val p = password.text.toString()
-                if (p.length < 6) {
-                    password.error = "至少 6 位"
-                    return@setOnClickListener
-                }
-                if (p != confirm.text.toString()) {
-                    confirm.error = "两次输入不一致"
-                    return@setOnClickListener
-                }
-                val salt = ByteArray(16).also { SecureRandom().nextBytes(it) }
-                prefs().edit()
-                    .putString(KEY_SALT, salt.joinToString("") { "%02x".format(it) })
-                    .putString(KEY_HASH, derive(p, salt))
-                    .apply()
-                dialog.dismiss()
-                showGuard()
-                showPasswordPrompt()
-            }
-        }
-        dialog.show()
-    }
-
     private fun showPasswordPrompt() {
         val input = EditText(this).apply {
-            hint = "输入家长密码"
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+            hint = "输入密码"
+            inputType = InputType.TYPE_CLASS_NUMBER
             setSingleLine(true)
+            filters = arrayOf(InputFilter.LengthFilter(6))
         }
         val dialog = AlertDialog.Builder(this)
-            .setTitle("屏幕保护")
-            .setMessage("验证通过后可使用手机 40 分钟。")
+            .setTitle("王梓淇请休息一会")
+            .setMessage("验证通过后可使用手机 40 分钟。请输入谷歌验证器的 6 位动态密码。")
             .setView(input)
             .setCancelable(false)
             .setPositiveButton("解锁", null)
@@ -178,24 +126,58 @@ class MainActivity : ComponentActivity() {
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val entered = input.text.toString()
-                val salt = decodeHex(prefs().getString(KEY_SALT, "") ?: "")
-                val expected = prefs().getString(KEY_HASH, "") ?: ""
-
-                // Fail closed: never accept an empty input or malformed/missing saved credentials.
-                if (entered.isEmpty() || entered.length < 6 || salt.size != 16 || expected.length != 64) {
-                    input.error = "密码错误"
+                if (entered.length != 6 || !entered.all { it in '0'..'9' } || !verifyTotp(entered)) {
+                    input.error = "动态密码错误或已过期"
                     return@setOnClickListener
                 }
-                val actual = derive(entered, salt)
-                if (MessageDigest.isEqual(expected.toByteArray(Charsets.US_ASCII), actual.toByteArray(Charsets.US_ASCII))) {
-                    dialog.dismiss()
-                    unlockForFortyMinutes()
-                } else {
-                    input.error = "密码错误"
-                }
+                dialog.dismiss()
+                unlockForFortyMinutes()
             }
         }
         dialog.show()
+    }
+
+    private fun verifyTotp(code: String): Boolean {
+        // Fixed Base32 secret, with whitespace/newlines removed.
+        val secret = "3XJSD7D2YTLONRMPETS6NG5VP4M6JPXU"
+        val key = decodeBase32(secret) ?: return false
+        val now = System.currentTimeMillis() / 1000L
+        // Allow the adjacent 30-second time steps to tolerate small device clock drift.
+        return (-1L..1L).any { offset ->
+            val counter = now / 30L + offset
+            totpCode(key, counter) == code
+        }
+    }
+
+    private fun totpCode(key: ByteArray, counter: Long): String {
+        val data = java.nio.ByteBuffer.allocate(8).putLong(counter).array()
+        val mac = javax.crypto.Mac.getInstance("HmacSHA1")
+        mac.init(javax.crypto.spec.SecretKeySpec(key, "HmacSHA1"))
+        val hash = mac.doFinal(data)
+        val offset = hash[hash.size - 1].toInt() and 0x0f
+        val binary = ((hash[offset].toInt() and 0x7f) shl 24) or
+            ((hash[offset + 1].toInt() and 0xff) shl 16) or
+            ((hash[offset + 2].toInt() and 0xff) shl 8) or
+            (hash[offset + 3].toInt() and 0xff)
+        return (binary % 1_000_000).toString().padStart(6, '0')
+    }
+
+    private fun decodeBase32(input: String): ByteArray? {
+        val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
+        val cleaned = input.filterNot { it.isWhitespace() || it == '=' }.uppercase(java.util.Locale.ROOT)
+        if (cleaned.isEmpty() || cleaned.any { alphabet.indexOf(it) < 0 }) return null
+        val output = java.io.ByteArrayOutputStream()
+        var buffer = 0
+        var bits = 0
+        for (ch in cleaned) {
+            buffer = (buffer shl 5) or alphabet.indexOf(ch)
+            bits += 5
+            if (bits >= 8) {
+                bits -= 8
+                output.write((buffer shr bits) and 0xff)
+            }
+        }
+        return output.toByteArray().takeIf { it.isNotEmpty() }
     }
 
     private fun unlockForFortyMinutes() {
@@ -239,8 +221,6 @@ class MainActivity : ComponentActivity() {
     companion object {
         const val PREFS = "minimal_guard"
         const val KEY_DEADLINE = "unlock_deadline"
-        private const val KEY_SALT = "password_salt"
-        private const val KEY_HASH = "password_hash"
         private const val UNLOCK_MS = 40 * 60 * 1000L
     }
 }
