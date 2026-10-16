@@ -321,9 +321,10 @@ class MainActivity : ComponentActivity() {
         val limit = getSharedPreferences("usage_settings", MODE_PRIVATE)
             .getInt(KEY_DAILY_LIMIT_MINUTES, 120)
         val overLimit = minutes >= limit
-        status.text = "使用情况访问：已授权\n今日应用前台时长合计（系统统计估算）：${minutes / 60} 小时 ${minutes % 60} 分钟\n每日提醒阈值：$limit 分钟\n" +
+        val scope = if (selectedGames.isNotEmpty()) "所选应用（${selectedGames.size} 个）" else "所有应用（尚未选择游戏）"
+        status.text = "使用情况访问：已授权\n统计范围：$scope\n今日前台时长（系统统计估算）：${minutes / 60} 小时 ${minutes % 60} 分钟\n每日提醒阈值：$limit 分钟\n" +
             (if (overLimit) "已达到阈值，请休息。此提醒仅在打开本应用时刷新。" else "距离提醒阈值约 ${limit - minutes} 分钟。") +
-            "\n注意：这是所有应用的估算合计，不等同于纯游戏时长；不会自动限制使用。"
+            "\n注意：这是系统使用情况估算，不会自动限制使用；需打开本应用刷新。"
     }
 
     private fun showBreakTimer() {
