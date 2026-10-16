@@ -65,6 +65,10 @@ class MainActivity : ComponentActivity() {
             setOnClickListener { verifyParentTotp() }
         })
         layout.addView(Button(this).apply {
+            text = "设置每日使用时长提醒阈值（需家长验证码）"
+            setOnClickListener { verifyParentTotp(forSettings = true) }
+        })
+        layout.addView(Button(this).apply {
             text = "开始休息 5 分钟倒计时"
             setOnClickListener { showBreakTimer() }
         })
@@ -113,7 +117,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun verifyParentTotp() {
+    private fun verifyParentTotp(forSettings: Boolean = false) {
         val input = EditText(this).apply {
             hint = "输入 6 位动态验证码"
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_VARIATION_PASSWORD
@@ -140,14 +144,50 @@ class MainActivity : ComponentActivity() {
                         } catch (_: Exception) { false }
                         if (ok) {
                             dialog.dismiss()
-                            android.app.AlertDialog.Builder(this)
-                                .setTitle("验证成功")
-                                .setMessage("家长身份验证通过。当前版本仅演示验证码验证，尚未将其接入游戏额度修改或强制锁定流程。")
-                                .setPositiveButton("知道了", null)
-                                .show()
+                            if (forSettings) {
+                                promptDailyUsageThreshold()
+                            } else {
+                                android.app.AlertDialog.Builder(this)
+                                    .setTitle("验证成功")
+                                    .setMessage("家长身份验证通过。当前版本的验证码用于保护设置入口；普通 APK 仍不能可靠阻止孩子退出或卸载应用。")
+                                    .setPositiveButton("知道了", null)
+                                    .show()
+                            }
                         } else {
                             input.error = "验证码错误或已过期"
                         }
+                    }
+                }
+                dialog.show()
+            }
+    }
+
+    private fun promptDailyUsageThreshold() {
+        val prefs = getSharedPreferences("usage_settings", MODE_PRIVATE)
+        val input = EditText(this).apply {
+            hint = "例如 120（分钟）"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setSingleLine(true)
+            setText(prefs.getInt(KEY_DAILY_LIMIT_MINUTES, 120).toString())
+        }
+        android.app.AlertDialog.Builder(this)
+            .setTitle("每日使用时长提醒阈值")
+            .setMessage("设置 30–600 分钟。该阈值用于本应用打开时的提醒，不会在后台自动锁屏，也不是纯游戏时长。")
+            .setView(input)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("保存", null)
+            .create().also { dialog ->
+                dialog.setOnShowListener {
+                    dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                        val minutes = input.text.toString().toIntOrNull()
+                        if (minutes == null || minutes !in 30..600) {
+                            input.error = "请输入 30 到 600 之间的整数"
+                            return@setOnClickListener
+                        }
+                        prefs.edit().putInt(KEY_DAILY_LIMIT_MINUTES, minutes).apply()
+                        dialog.dismiss()
+                        refreshStatus()
+                        Toast.makeText(this, "已保存每日提醒阈值：$minutes 分钟", Toast.LENGTH_LONG).show()
                     }
                 }
                 dialog.show()
@@ -216,7 +256,12 @@ class MainActivity : ComponentActivity() {
         val totalMs = manager.queryAndAggregateUsageStats(start, now)
             .values.sumOf { it.totalTimeInForeground.coerceAtLeast(0L) }
         val minutes = totalMs / 60_000
-        status.text = "使用情况访问：已授权\n今日应用前台时长合计（系统统计估算）：${minutes / 60} 小时 ${minutes % 60} 分钟\n注意：此统计不等同于纯游戏时长，当前尚未自动限制额度。"
+        val limit = getSharedPreferences("usage_settings", MODE_PRIVATE)
+            .getInt(KEY_DAILY_LIMIT_MINUTES, 120)
+        val overLimit = minutes >= limit
+        status.text = "使用情况访问：已授权\n今日应用前台时长合计（系统统计估算）：${minutes / 60} 小时 ${minutes % 60} 分钟\n每日提醒阈值：$limit 分钟\n" +
+            (if (overLimit) "已达到阈值，请休息。此提醒仅在打开本应用时刷新。" else "距离提醒阈值约 ${limit - minutes} 分钟。") +
+            "\n注意：这是所有应用的估算合计，不等同于纯游戏时长；不会自动限制使用。"
     }
 
     private fun showBreakTimer() {
@@ -259,5 +304,6 @@ class MainActivity : ComponentActivity() {
 
     companion object {
         private const val KEY_TOTP_SECRET = "totp_secret_base32"
+        private const val KEY_DAILY_LIMIT_MINUTES = "daily_limit_minutes"
     }
 }
