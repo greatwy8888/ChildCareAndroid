@@ -1,47 +1,41 @@
 package com.example.childcare
 
+import android.app.admin.DevicePolicyManager
 import android.content.BroadcastReceiver
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.util.Log
 
-/**
- * Best-effort boot entry point for a regular APK.
- *
- * Android 10+ restricts launching activities from the background, and some OEM
- * builds (including some Honor/MagicOS versions) may block it. Therefore this
- * receiver never treats an automatic UI launch as guaranteed. The user should
- * enable the app's Auto-launch/background-running permissions in system settings.
- */
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
-        when (intent.action) {
-            Intent.ACTION_BOOT_COMPLETED,
-            Intent.ACTION_LOCKED_BOOT_COMPLETED,
-            Intent.ACTION_MY_PACKAGE_REPLACED -> {
-                Log.i(TAG, "Startup broadcast received: ${intent.action}")
+        if (intent.action !in setOf(
+                Intent.ACTION_BOOT_COMPLETED,
+                Intent.ACTION_LOCKED_BOOT_COMPLETED,
+                Intent.ACTION_MY_PACKAGE_REPLACED
+            )) return
 
-                // Best-effort attempt to reopen the app after a reboot/update.
-                // Android may block this background activity launch; the app must
-                // still be launchable normally from its launcher icon.
-                val launchIntent = context.packageManager
-                    .getLaunchIntentForPackage(context.packageName)
-                if (launchIntent != null) {
-                    launchIntent.addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK or
-                            Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    )
-                    try {
-                        context.startActivity(launchIntent)
-                    } catch (e: Exception) {
-                        Log.w(TAG, "System blocked automatic app launch", e)
-                    }
-                }
+        // Fail closed: every reboot/update returns to the protected state.
+        context.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
+            .edit().remove(MainActivity.KEY_UNLOCK_UNTIL).apply()
+
+        val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        if (dpm.isDeviceOwnerApp(context.packageName)) {
+            try {
+                dpm.setLockTaskPackages(ComponentName(context, AdminReceiver::class.java), arrayOf(context.packageName))
+                dpm.setStatusBarDisabled(ComponentName(context, AdminReceiver::class.java), true)
+            } catch (e: Exception) {
+                Log.e(TAG, "Unable to apply device-owner lock policy", e)
             }
+        }
+
+        val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        if (launch != null) {
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            try { context.startActivity(launch) }
+            catch (e: Exception) { Log.w(TAG, "System blocked boot activity launch", e) }
         }
     }
 
-    companion object {
-        private const val TAG = "ChildCareBoot"
-    }
+    companion object { private const val TAG = "ChildCareBoot" }
 }
