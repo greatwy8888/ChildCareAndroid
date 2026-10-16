@@ -6,8 +6,11 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.Bundle
+import android.text.InputFilter
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -16,7 +19,6 @@ import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import android.text.InputFilter
 import androidx.activity.ComponentActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.setPadding
@@ -55,6 +57,15 @@ class MainActivity : ComponentActivity() {
 
     private fun prefs() = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun roundedBackground(color: Int, radiusDp: Int, strokeColor: Int? = null): GradientDrawable =
+        GradientDrawable().apply {
+            setColor(color)
+            cornerRadius = dp(radiusDp).toFloat()
+            if (strokeColor != null) setStroke(dp(1), strokeColor)
+        }
+
     private fun showGuard() {
         locked = true
         applyImmersive()
@@ -63,37 +74,89 @@ class MainActivity : ComponentActivity() {
             try {
                 dpm.setLockTaskPackages(admin(), arrayOf(packageName))
                 dpm.setStatusBarDisabled(admin(), true)
+                // Only Device Owner can enforce this. A regular APK cannot block system uninstall.
+                dpm.setUninstallBlocked(admin(), packageName, true)
                 if (dpm.isLockTaskPermitted(packageName) &&
                     (getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) {
                     startLockTask()
                 }
             } catch (_: Exception) { }
         }
+
+        val background = Color.rgb(10, 17, 35)
+        val panel = Color.rgb(22, 34, 61)
+        val accent = Color.rgb(130, 190, 255)
+        val muted = Color.rgb(190, 205, 230)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
-            setPadding(36)
-            setBackgroundColor(android.graphics.Color.rgb(12, 20, 42))
+            setPadding(dp(26))
+            setBackgroundColor(background)
         }
-        root.addView(TextView(this).apply {
+
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER_HORIZONTAL
+            setPadding(dp(24))
+            background = roundedBackground(panel, 28, Color.rgb(48, 67, 103))
+        }
+        val iconCircle = TextView(this).apply {
             text = "✦"
-            textSize = 70f
+            textSize = 38f
             gravity = Gravity.CENTER
-            setTextColor(android.graphics.Color.rgb(145, 198, 255))
-        }, LinearLayout.LayoutParams(-1, -2))
-        root.addView(TextView(this).apply {
-            text = "王梓淇请休息一会"
-            textSize = 28f
-            gravity = Gravity.CENTER
-            setTextColor(android.graphics.Color.WHITE)
-            setPadding(0, 16, 0, 10)
-        }, LinearLayout.LayoutParams(-1, -2))
-        root.addView(TextView(this).apply {
-            text = "输入密码继续使用"
+            setTextColor(accent)
+            background = roundedBackground(Color.rgb(32, 51, 85), 40)
+        }
+        card.addView(iconCircle, LinearLayout.LayoutParams(dp(82), dp(82)).apply {
+            bottomMargin = dp(24)
+        })
+
+        card.addView(TextView(this).apply {
+            text = "友情提示："
             textSize = 16f
             gravity = Gravity.CENTER
-            setTextColor(android.graphics.Color.rgb(194, 207, 231))
-            setPadding(0, 0, 0, 20)
+            setTextColor(accent)
+            setPadding(0, 0, 0, dp(10))
+        }, LinearLayout.LayoutParams(-1, -2))
+
+        card.addView(TextView(this).apply {
+            text = "王梓淇请休息一会"
+            textSize = 27f
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            setPadding(0, 0, 0, dp(14))
+        }, LinearLayout.LayoutParams(-1, -2))
+
+        card.addView(View(this).apply {
+            setBackgroundColor(Color.rgb(58, 78, 115))
+        }, LinearLayout.LayoutParams(dp(56), dp(2)).apply {
+            bottomMargin = dp(18)
+        })
+
+        card.addView(TextView(this).apply {
+            text = "请放下手机，休息一下眼睛"
+            textSize = 16f
+            gravity = Gravity.CENTER
+            setTextColor(muted)
+            setPadding(0, 0, 0, dp(8))
+        }, LinearLayout.LayoutParams(-1, -2))
+
+        card.addView(TextView(this).apply {
+            text = "输入密码继续使用"
+            textSize = 14f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(143, 160, 191))
+        }, LinearLayout.LayoutParams(-1, -2))
+
+        root.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
+            gravity = Gravity.CENTER
+        })
+        root.addView(TextView(this).apply {
+            text = "健康使用手机 · 保护视力"
+            textSize = 12f
+            gravity = Gravity.CENTER
+            setTextColor(Color.rgb(104, 124, 158))
+            setPadding(0, dp(22), 0, 0)
         }, LinearLayout.LayoutParams(-1, -2))
         setContentView(root)
     }
@@ -118,7 +181,7 @@ class MainActivity : ComponentActivity() {
         }
         val dialog = AlertDialog.Builder(this)
             .setTitle("王梓淇请休息一会")
-            .setMessage("验证通过后可使用手机 40 分钟。请输入谷歌验证器的 6 位动态密码。")
+            .setMessage("验证通过后可使用手机 40 分钟。")
             .setView(input)
             .setCancelable(false)
             .setPositiveButton("解锁", null)
@@ -138,14 +201,11 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun verifyTotp(code: String): Boolean {
-        // Fixed Base32 secret, with whitespace/newlines removed.
         val secret = "3XJSD7D2YTLONRMPETS6NG5VP4M6JPXU"
         val key = decodeBase32(secret) ?: return false
         val now = System.currentTimeMillis() / 1000L
-        // Allow the adjacent 30-second time steps to tolerate small device clock drift.
         return (-1L..1L).any { offset ->
-            val counter = now / 30L + offset
-            totpCode(key, counter) == code
+            totpCode(key, now / 30L + offset) == code
         }
     }
 
