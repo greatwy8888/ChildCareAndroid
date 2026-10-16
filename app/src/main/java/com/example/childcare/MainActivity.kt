@@ -1,8 +1,11 @@
 package com.example.childcare
 
 import android.app.AlertDialog
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
-import android.os.CountDownTimer
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
@@ -20,32 +23,61 @@ import java.security.SecureRandom
 import java.util.Locale
 
 /**
- * Minimal TOTP screen-protection prototype.
- * A normal APK cannot reliably lock the whole device or block system navigation.
+ * Device-owner screen guard. A regular APK can only provide a best-effort UI;
+ * device-owner provisioning is required for kiosk enforcement.
  */
 class MainActivity : ComponentActivity() {
-    private var timer: CountDownTimer? = null
     private lateinit var root: LinearLayout
-    private lateinit var hint: TextView
-    private var unlocked = false
+    private var locked = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        window.decorView.systemUiVisibility = (
-            View.SYSTEM_UI_FLAG_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            )
-        showProtectionScreen()
+        enterProtectionMode()
         if (!securePrefs().contains(KEY_SECRET)) showFirstRunSetup()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        enterProtectionMode()
     }
 
     override fun onResume() {
         super.onResume()
+        if (locked) applyImmersiveMode()
+        if (isDeviceOwner() && !locked) {
+            val until = getSharedPreferences(PREFS, MODE_PRIVATE).getLong(KEY_UNLOCK_UNTIL, 0L)
+            if (until <= System.currentTimeMillis()) enterProtectionMode()
+        }
+    }
+
+    @Deprecated("Deprecated in Android API; overridden to keep the protection screen visible")
+    override fun onBackPressed() {
+        if (locked) {
+            Toast.makeText(this, "请输入家长动态验证码解锁", Toast.LENGTH_SHORT).show()
+        } else {
+            super.onBackPressed()
+        }
+    }
+
+    private fun enterProtectionMode() {
+        locked = true
+        applyImmersiveMode()
+        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        if (dpm.isDeviceOwnerApp(packageName)) {
+            try {
+                dpm.setLockTaskPackages(adminComponent(), arrayOf(packageName))
+                dpm.setStatusBarDisabled(adminComponent(), true)
+                if (dpm.isLockTaskPermitted(packageName)) startLockTask()
+            } catch (_: Exception) {
+                // Keep the full-screen UI; setup instructions explain provisioning.
+            }
+        }
+        renderProtectionScreen()
+    }
+
+    private fun applyImmersiveMode() {
         window.decorView.systemUiVisibility = (
             View.SYSTEM_UI_FLAG_FULLSCREEN or
                 View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
@@ -54,16 +86,6 @@ class MainActivity : ComponentActivity() {
                 View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
                 View.SYSTEM_UI_FLAG_LAYOUT_STABLE
             )
-    }
-
-    @Deprecated("Deprecated in Android API; overridden to keep the protection screen visible")
-    override fun onBackPressed() {
-        if (!unlocked) {
-            // No in-app back navigation while the protection screen is locked.
-            Toast.makeText(this, "请输入家长动态验证码解锁", Toast.LENGTH_SHORT).show()
-        } else {
-            super.onBackPressed()
-        }
     }
 
     private fun securePrefs() = EncryptedSharedPreferences.create(
@@ -74,66 +96,52 @@ class MainActivity : ComponentActivity() {
         EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
     )
 
-    private fun showProtectionScreen() {
-        unlocked = false
+    private fun renderProtectionScreen() {
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(36)
             setBackgroundColor(android.graphics.Color.rgb(12, 20, 42))
         }
-        val emblem = TextView(this).apply {
+        root.addView(TextView(this).apply {
             text = "✦"
             textSize = 64f
             gravity = Gravity.CENTER
             setTextColor(android.graphics.Color.rgb(145, 198, 255))
-        }
-        val title = TextView(this).apply {
+        }, LinearLayout.LayoutParams(-1, -2))
+        root.addView(TextView(this).apply {
             text = "屏幕保护"
             textSize = 30f
             gravity = Gravity.CENTER
             setTextColor(android.graphics.Color.WHITE)
             setPadding(0, 12, 0, 8)
-        }
-        val subtitle = TextView(this).apply {
+        }, LinearLayout.LayoutParams(-1, -2))
+        root.addView(TextView(this).apply {
             text = "请休息片刻，再继续使用"
             textSize = 16f
             gravity = Gravity.CENTER
             setTextColor(android.graphics.Color.rgb(194, 207, 231))
             setPadding(0, 0, 0, 36)
-        }
-        hint = TextView(this).apply {
-            text = "请输入家长 Google Authenticator 验证码"
-            textSize = 16f
-            gravity = Gravity.CENTER
-            setTextColor(android.graphics.Color.WHITE)
-            setPadding(0, 12, 0, 16)
-        }
-        val unlock = Button(this).apply {
+        }, LinearLayout.LayoutParams(-1, -2))
+        root.addView(Button(this).apply {
             text = "输入动态验证码"
             setOnClickListener { promptCode() }
-        }
-        root.addView(emblem, LinearLayout.LayoutParams(-1, -2))
-        root.addView(title, LinearLayout.LayoutParams(-1, -2))
-        root.addView(subtitle, LinearLayout.LayoutParams(-1, -2))
-        root.addView(hint, LinearLayout.LayoutParams(-1, -2))
-        root.addView(unlock, LinearLayout.LayoutParams(-1, -2))
+        }, LinearLayout.LayoutParams(-1, -2))
         setContentView(root)
     }
 
     private fun showFirstRunSetup() {
-        val bytes = ByteArray(20).also { SecureRandom().nextBytes(it) }
-        val secret = base32Encode(bytes)
+        val secret = base32Encode(ByteArray(20).also { SecureRandom().nextBytes(it) })
         securePrefs().edit().putString(KEY_SECRET, secret).apply()
         AlertDialog.Builder(this)
             .setTitle("首次设置家长验证码")
             .setMessage(
-                "请先在家长的 Google Authenticator 中添加一个基于时间的一次性密码（TOTP），手动输入以下密钥：\n\n" +
+                "请在家长自己的 Google Authenticator 中添加“基于时间的一次性密码（TOTP）”，手动输入密钥：\n\n" +
                     secret +
-                    "\n\n请妥善保存密钥。设置完成后点击“已添加”，之后只有当前有效的 6 位动态验证码可以解锁。"
+                    "\n\n请将密钥安全保存在家长处。密钥丢失后，设备所有者模式下可能需要恢复出厂设置才能恢复设备使用。"
             )
             .setCancelable(false)
-            .setPositiveButton("已添加") { _, _ -> showProtectionScreen() }
+            .setPositiveButton("已添加") { _, _ -> renderProtectionScreen() }
             .show()
     }
 
@@ -158,7 +166,7 @@ class MainActivity : ComponentActivity() {
                 } catch (_: Exception) { false }
                 if (valid) {
                     dialog.dismiss()
-                    enterUnlockedPeriod()
+                    unlockForFortyMinutes()
                 } else {
                     input.error = "验证码错误或已过期"
                 }
@@ -167,40 +175,39 @@ class MainActivity : ComponentActivity() {
         dialog.show()
     }
 
-    private fun enterUnlockedPeriod() {
-        unlocked = true
-        timer?.cancel()
-        root.removeAllViews()
-        root.gravity = Gravity.CENTER
-        val message = TextView(this).apply {
-            text = "已解锁\n可正常使用 40 分钟"
-            textSize = 26f
-            gravity = Gravity.CENTER
-            setTextColor(android.graphics.Color.WHITE)
+    private fun unlockForFortyMinutes() {
+        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+        if (dpm.isDeviceOwnerApp(packageName)) {
+            try {
+                dpm.setStatusBarDisabled(adminComponent(), false)
+                if (isLockTaskModeActive()) stopLockTask()
+            } catch (_: Exception) { }
         }
-        val remaining = TextView(this).apply {
-            textSize = 18f
-            gravity = Gravity.CENTER
-            setTextColor(android.graphics.Color.rgb(194, 207, 231))
-            setPadding(0, 24, 0, 0)
+        locked = false
+        val deadline = System.currentTimeMillis() + UNLOCK_MS
+        getSharedPreferences(PREFS, MODE_PRIVATE).edit().putLong(KEY_UNLOCK_UNTIL, deadline).apply()
+        val service = Intent(this, UnlockTimerService::class.java).putExtra(UnlockTimerService.EXTRA_DEADLINE, deadline)
+        try {
+            androidx.core.content.ContextCompat.startForegroundService(this, service)
+        } catch (_: Exception) {
+            Toast.makeText(this, "无法启动计时服务；请检查系统后台运行权限。", Toast.LENGTH_LONG).show()
         }
-        root.addView(message, LinearLayout.LayoutParams(-1, -2))
-        root.addView(remaining, LinearLayout.LayoutParams(-1, -2))
-        timer = object : CountDownTimer(UNLOCK_MS, 1000L) {
-            override fun onTick(millisUntilFinished: Long) {
-                val total = millisUntilFinished / 1000
-                remaining.text = String.format(Locale.getDefault(), "剩余 %02d:%02d", total / 60, total % 60)
-            }
-            override fun onFinish() {
-                unlocked = false
-                showProtectionScreen()
-                Toast.makeText(this@MainActivity, "40 分钟已到，请重新输入家长验证码", Toast.LENGTH_LONG).show()
-            }
-        }.start()
+        Toast.makeText(this, "验证成功，手机已解锁 40 分钟", Toast.LENGTH_LONG).show()
+        // Return to the home screen so the child can use other apps normally.
+        moveTaskToBack(true)
     }
 
+    private fun isLockTaskModeActive(): Boolean {
+        val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+        return am.lockTaskModeState != android.app.ActivityManager.LOCK_TASK_MODE_NONE
+    }
+
+    private fun isDeviceOwner() =
+        (getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager).isDeviceOwnerApp(packageName)
+
+    private fun adminComponent() = ComponentName(this, AdminReceiver::class.java)
+
     override fun onDestroy() {
-        timer?.cancel()
         super.onDestroy()
     }
 
@@ -241,6 +248,8 @@ class MainActivity : ComponentActivity() {
     }
 
     companion object {
+        const val PREFS = "screen_guard_state"
+        const val KEY_UNLOCK_UNTIL = "unlock_until_wall_clock"
         private const val KEY_SECRET = "totp_secret_base32"
         private const val UNLOCK_MS = 40 * 60 * 1000L
     }
