@@ -83,22 +83,22 @@ class MainActivity : ComponentActivity() {
             } catch (_: Exception) { }
         }
 
-        val background = Color.rgb(10, 17, 35)
-        val panel = Color.rgb(22, 34, 61)
+        val pageBackground = Color.rgb(10, 17, 35)
+        val cardBackground = Color.rgb(22, 34, 61)
         val accent = Color.rgb(130, 190, 255)
         val muted = Color.rgb(190, 205, 230)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             setPadding(dp(26))
-            setBackgroundColor(background)
+            setBackgroundColor(pageBackground)
         }
 
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
             setPadding(dp(24))
-            background = roundedBackground(panel, 28, Color.rgb(48, 67, 103))
+            background = roundedBackground(cardBackground, 28, Color.rgb(48, 67, 103))
         }
         val iconCircle = TextView(this).apply {
             text = "✦"
