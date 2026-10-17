@@ -43,3 +43,9 @@ The test branch now:
 - checks an expired saved deadline when the activity next resumes, as a recovery path.
 
 Important limitation: Android and OEM background-activity restrictions may still prevent the lock screen from appearing at the exact deadline. The activity-resume check only helps once the app activity is resumed; it does not independently force the user out of another app. Reliable enforcement must be verified on a spare physical device and must not be claimed based only on a successful CI build.
+
+## Uninstall behavior: current gap
+
+The current test branch calls `setUninstallBlocked(admin, packageName, true)` whenever the guard screen is shown. It does **not** currently provide a TOTP-authenticated uninstall-authorization flow, so this is a persistent block rather than “enter a dynamic code to uninstall.” Also, a Device Owner app is subject to Android device-management removal rules beyond this flag; simply clearing the uninstall-block flag is not a safe or complete uninstall procedure.
+
+Do not try to remove the currently installed Device Owner app as a test. Before designing an authorized removal flow, the recovery plan must account for how Device Owner status can be relinquished on the exact Android/Honor build without leaving the phone unmanaged or requiring an unexpected factory reset. Until that is validated, the existing phone should remain unchanged.
