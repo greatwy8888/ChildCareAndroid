@@ -284,9 +284,13 @@ class MainActivity : ComponentActivity() {
 
     private fun admin() = ComponentName(this, AdminReceiver::class.java)
 
-    companion object {
-        const val PREFS = "minimal_guard"
-        const val KEY_DEADLINE = "unlock_deadline"
-        private const val UNLOCK_MS = 40 * 60 * 1000L
-    }
+companion object {
+    const val PREFS = "minimal_guard"
+    const val KEY_DEADLINE = "unlock_deadline"
+
+    const val KEY_DURATION_MINUTES = "unlock_duration_minutes"
+    const val DEFAULT_DURATION_MINUTES = 40
+    const val MIN_DURATION_MINUTES = 5
+    const val MAX_DURATION_MINUTES = 180
+}
 }
