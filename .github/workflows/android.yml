@@ -1,7 +1,7 @@
 name: Android APK
 on:
   push:
-    branches: [ "main", "feature/totp-protected-settings" ]
+    branches: [ "main", "feature/totp-protected-settings", "safe-alternative-test" ]
   pull_request:
     branches: [ "main" ]
   workflow_dispatch:
