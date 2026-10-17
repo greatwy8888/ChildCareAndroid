@@ -56,6 +56,9 @@ internal object Totp {
                 output.write((buffer shr bits) and 0xff)
             }
         }
+        // RFC 4648 requires unused trailing bits to be zero. Reject malformed
+        // encodings instead of silently accepting ambiguous secret strings.
+        if (bits > 0 && (buffer and ((1 shl bits) - 1)) != 0) return null
         return output.toByteArray().takeIf { it.isNotEmpty() }
     }
 }
