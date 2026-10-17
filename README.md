@@ -12,13 +12,16 @@
 - 原保护版包名仍为：`com.example.childcare`
 - 原有安装和 `main` 分支不由本分支修改。
 
-## 构建
+## 构建与下载
 
-GitHub Actions → Android APK → 对应本分支的运行记录 → Artifacts，下载 `ChildCareAndroid-debug` 并解压得到 `app-debug.apk`。
+打开 [GitHub Actions](https://github.com/greatwy8888/ChildCareAndroid/actions)，选择 `safe-alternative-test` 分支的最新 `Android APK` 工作流运行，然后在 Artifacts 中下载：
 
-Actions 页面： https://github.com/greatwy8888/ChildCareAndroid/actions
+- `ChildCareAndroid-debug`：调试测试包。
+- `ChildCareAndroid-release-signed`：只有当四项 GitHub Actions 签名密钥配置齐全并且 Release 构建成功时才会生成的签名版测试包。
 
-构建成功仅代表编译和配置检查通过，不代表已经在荣耀手机上验证了锁屏、开机启动、计时或防绕过行为。
+工作流会报告 APK 签名证书指纹，但不会输出密钥或口令。请在安装前核对包名和证书信息。Release 包使用本测试分支配置的新签名密钥，**不等于**旧版 `com.example.childcare` 的兼容升级包。
+
+构建成功仅代表编译和自动化单元测试通过，不代表已经在荣耀手机上验证了锁屏、开机启动、计时或防绕过行为。
 
 ## 安全边界
 
@@ -32,6 +35,7 @@ Actions 页面： https://github.com/greatwy8888/ChildCareAndroid/actions
 ## 验证清单
 
 - [ ] GitHub Actions 构建和单元测试成功
+- [ ] 如签名密钥已配置，Release APK 构建和签名验证成功
 - [ ] APK 包名确认为 `com.example.childcare.next`
 - [ ] APK 显示名称确认为 `lock screen TEST`
 - [ ] 在备用测试设备验证 TOTP 正确/错误输入
@@ -39,7 +43,6 @@ Actions 页面： https://github.com/greatwy8888/ChildCareAndroid/actions
 - [ ] 验证重启行为和系统限制
 - [ ] 记录测试结果并审查所有失败项
 - [ ] 在讨论任何正式迁移前准备备份和恢复方案
-
 
 ## 最新安全审查说明
 
