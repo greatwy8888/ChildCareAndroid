@@ -46,6 +46,10 @@ class UnlockTimerService : Service() {
 
     private fun relock() {
         Log.i(TAG, "Usage timer expired; requesting lock screen activity")
+        // Post before requesting the activity to avoid a race where MainActivity
+        // resumes and cancels the notification just before it is posted.
+        getSystemService(NotificationManager::class.java)
+            .notify(EXPIRED_NOTIFICATION_ID, expiryNotification())
         val launch = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
@@ -57,11 +61,8 @@ class UnlockTimerService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "System blocked relock activity launch; keeping expired deadline for recovery", e)
         }
-        // Keep a user-tappable recovery notification after stopping the foreground
-        // service. Android may silently block the activity launch; the expired
-        // deadline remains persisted until MainActivity actually resumes.
-        getSystemService(NotificationManager::class.java)
-            .notify(EXPIRED_NOTIFICATION_ID, expiryNotification())
+        // Android may silently block the activity launch; the expired deadline
+        // remains persisted until MainActivity actually resumes.
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
