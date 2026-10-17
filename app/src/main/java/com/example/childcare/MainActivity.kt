@@ -258,7 +258,7 @@ class MainActivity : ComponentActivity() {
         return output.toByteArray().takeIf { it.isNotEmpty() }
     }
 
-    private fun unlockForFortyMinutes() {
+   private fun unlockForDuration() {
         val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         if (dpm.isDeviceOwnerApp(packageName)) {
             try {
