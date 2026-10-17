@@ -24,11 +24,17 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.core.view.setPadding
 
 class MainActivity : ComponentActivity() {
     private var locked = true
+    private val notificationPermissionLauncher =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
+            showGuard()
+            showPasswordPrompt()
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -50,24 +56,11 @@ class MainActivity : ComponentActivity() {
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 7301)
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
             return
         }
         showGuard()
         showPasswordPrompt()
-    }
-
-    @Deprecated("Use the permission result callback")
-    override fun onRequestPermissionsResult(
-        requestCode: Int,
-        permissions: Array<out String>,
-        grantResults: IntArray
-    ) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 7301) {
-            showGuard()
-            showPasswordPrompt()
-        }
     }
 
     override fun onNewIntent(intent: Intent) {
