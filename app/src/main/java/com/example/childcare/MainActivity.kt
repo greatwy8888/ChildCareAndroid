@@ -51,9 +51,23 @@ class MainActivity : ComponentActivity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 7301)
+            return
         }
         showGuard()
         showPasswordPrompt()
+    }
+
+    @Deprecated("Use the permission result callback")
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 7301) {
+            showGuard()
+            showPasswordPrompt()
+        }
     }
 
     override fun onNewIntent(intent: Intent) {
