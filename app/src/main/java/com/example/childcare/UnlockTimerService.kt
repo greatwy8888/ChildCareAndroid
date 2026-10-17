@@ -48,10 +48,9 @@ class UnlockTimerService : Service() {
         }
         try {
             startActivity(launch)
-            // Clear only after startActivity did not throw. If Android blocks the
-            // launch, MainActivity can detect the expired deadline when next resumed.
-            getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
-                .edit().remove(MainActivity.KEY_DEADLINE).apply()
+            // Do not clear the deadline here: some Android/OEM background-launch
+            // restrictions can silently block the launch without throwing.
+            // MainActivity consumes the expired deadline only after it resumes.
         } catch (e: Exception) {
             Log.e(TAG, "System blocked relock activity launch; keeping expired deadline for recovery", e)
         }
