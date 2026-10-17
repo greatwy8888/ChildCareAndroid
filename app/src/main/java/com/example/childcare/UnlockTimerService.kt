@@ -43,13 +43,18 @@ class UnlockTimerService : Service() {
     }
 
     private fun relock() {
-        getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
-            .edit().remove(MainActivity.KEY_DEADLINE).apply()
         val launch = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
-        try { startActivity(launch) }
-        catch (e: Exception) { Log.e(TAG, "System blocked relock activity launch", e) }
+        try {
+            startActivity(launch)
+            // Clear only after startActivity did not throw. If Android blocks the
+            // launch, MainActivity can detect the expired deadline when next resumed.
+            getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
+                .edit().remove(MainActivity.KEY_DEADLINE).apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "System blocked relock activity launch; keeping expired deadline for recovery", e)
+        }
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
