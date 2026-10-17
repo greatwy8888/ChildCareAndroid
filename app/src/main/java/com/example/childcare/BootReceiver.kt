@@ -10,6 +10,7 @@ import android.util.Log
 class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action !in setOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED)) return
+        Log.i(TAG, "Received boot/update event; resetting usage session and applying guard policy")
         // After every boot/update, discard any previous session and start in the locked state.
         // On boot/update, discard any prior session so the app returns to its locked state.
         context.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
@@ -27,8 +28,12 @@ class BootReceiver : BroadcastReceiver() {
         val launch = context.packageManager.getLaunchIntentForPackage(context.packageName)
         if (launch != null) {
             launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-            try { context.startActivity(launch) }
-            catch (e: Exception) { Log.w(TAG, "System blocked boot activity launch", e) }
+            try {
+                context.startActivity(launch)
+                Log.i(TAG, "Requested guard activity launch after boot/update")
+            } catch (e: Exception) {
+                Log.w(TAG, "System blocked boot activity launch", e)
+            }
         }
     }
     companion object { private const val TAG = "MinimalGuardBoot" }
