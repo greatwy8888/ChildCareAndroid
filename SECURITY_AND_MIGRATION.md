@@ -39,8 +39,8 @@ A successful GitHub Actions build establishes only that the source compiled and 
 
 The test branch now:
 - attempts to start the foreground timer service before disabling kiosk restrictions; if that call throws, it keeps the guard active and removes the saved deadline;
-- retains an expired deadline if the service's attempt to open the lock screen throws;
-- checks an expired saved deadline when the activity next resumes, as a recovery path.
+- retains an expired deadline after requesting the lock screen, because Android/OEM restrictions may silently block a background launch without throwing;
+- consumes the expired deadline only after the lock activity resumes, and checks it there as a recovery path.
 
 Important limitation: Android and OEM background-activity restrictions may still prevent the lock screen from appearing at the exact deadline. The activity-resume check only helps once the app activity is resumed; it does not independently force the user out of another app. Reliable enforcement must be verified on a spare physical device and must not be claimed based only on a successful CI build.
 
