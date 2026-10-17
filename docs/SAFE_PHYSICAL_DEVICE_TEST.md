@@ -22,7 +22,7 @@ GitHub Actions passing is not device evidence. This procedure records observed b
 3. Enter an incorrect or expired six-digit code; confirm the app does not unlock.
 4. Enter the current valid parent code; confirm the app reports the configured unlock duration.
 5. Open Settings and verify it requires parent verification; set a short test interval (minimum 5 minutes), then confirm the saved value persists.
-6. Start another app and wait through the full interval. Record whether the guard appears automatically, whether a notification appears, and whether the guard appears after manually returning to Lock Screen.
+6. Start another app and wait through the full interval. Record whether the guard appears automatically. If Android blocks the background launch, verify that the persistent “休息时间到了” recovery notification appears and opens Lock Screen when tapped. This notification is a recovery fallback, **not proof of forced relock**; notification permission and OEM policy may affect visibility.
 7. Repeat with the screen turned off/on. Do not infer success solely from a toast or log message.
 
 ## Phase B — Device Owner / kiosk test (spare device only)
