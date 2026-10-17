@@ -15,6 +15,7 @@ import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.view.WindowManager
+import android.util.Log
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -67,6 +68,8 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         val deadline = prefs().getLong(KEY_DEADLINE, 0L)
+        val now = System.currentTimeMillis()
+        Log.i(TAG, "onResume: deadlinePresent=" + (deadline > 0L) + ", expired=" + (deadline > 0L && deadline <= now) + ", locked=" + locked)
         if (deadline > 0L && deadline <= System.currentTimeMillis()) {
             // The service leaves the expired deadline in place because Android may
             // silently block a background activity launch without throwing.
@@ -416,6 +419,7 @@ private fun showSettingsDialog(onClosed: (() -> Unit)? = null) {
     private fun admin() = ComponentName(this, AdminReceiver::class.java)
 
 companion object {
+    private const val TAG = "MinimalGuardActivity"
     const val PREFS = "minimal_guard"
     const val KEY_DEADLINE = "unlock_deadline"
 
