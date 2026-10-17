@@ -57,8 +57,35 @@ class UnlockTimerService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "System blocked relock activity launch; keeping expired deadline for recovery", e)
         }
+        // Keep a user-tappable recovery notification after stopping the foreground
+        // service. Android may silently block the activity launch; the expired
+        // deadline remains persisted until MainActivity actually resumes.
+        getSystemService(NotificationManager::class.java)
+            .notify(EXPIRED_NOTIFICATION_ID, expiryNotification())
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun expiryNotification(): Notification {
+        val pending = PendingIntent.getActivity(
+            this, EXPIRED_NOTIFICATION_ID,
+            Intent(this, MainActivity::class.java).addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP
+            ),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        return NotificationCompat.Builder(this, CHANNEL)
+            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setContentTitle("休息时间到了")
+            .setContentText("如果锁屏未自动显示，请点击返回 Lock Screen")
+            .setContentIntent(pending)
+            .setAutoCancel(false)
+            .setOngoing(true)
+            .setCategory(Notification.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .build()
     }
 
     private fun notification(): Notification {
@@ -89,6 +116,7 @@ class UnlockTimerService : Service() {
         const val EXTRA_DEADLINE = "deadline"
         private const val CHANNEL = "usage_timer"
         private const val NOTIFICATION_ID = 42
+        const val EXPIRED_NOTIFICATION_ID = 43
         private const val TAG = "MinimalGuardTimer"
     }
 }
