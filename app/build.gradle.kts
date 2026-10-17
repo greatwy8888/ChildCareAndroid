@@ -6,11 +6,12 @@ android {
     namespace = "com.example.childcare"
     compileSdk = 35
     defaultConfig {
-        applicationId = "com.example.childcare"
+        // Isolated package: this test build must never replace the installed Device Owner app.
+        applicationId = "com.example.childcare.next"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 1
+        versionName = "0.1.0-test"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     compileOptions {
