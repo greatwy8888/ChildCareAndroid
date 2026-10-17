@@ -190,6 +190,74 @@ class MainActivity : ComponentActivity() {
             )
     }
 
+    
+private fun showSettingsDialog(onClosed: (() -> Unit)? = null) {
+    val current = prefs().getInt(
+        KEY_DURATION_MINUTES,
+        DEFAULT_DURATION_MINUTES
+    ).coerceIn(MIN_DURATION_MINUTES, MAX_DURATION_MINUTES)
+
+    val input = EditText(this).apply {
+        inputType = InputType.TYPE_CLASS_NUMBER
+        setSingleLine(true)
+        setText(current.toString())
+        hint = "5 至 180 分钟"
+    }
+
+    val container = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(dp(24), dp(8), dp(24), dp(8))
+
+        addView(input)
+
+        addView(TextView(this@MainActivity).apply {
+            text = "设置解锁时长，范围 5–180 分钟，默认 40 分钟。"
+            textSize = 13f
+            setTextColor(Color.GRAY)
+            setPadding(0, dp(12), 0, 0)
+        })
+    }
+
+    val dialog = AlertDialog.Builder(this)
+        .setTitle("⚙ 解锁时长设置")
+        .setView(container)
+        .setNegativeButton("取消", null)
+        .setPositiveButton("保存", null)
+        .create()
+
+    dialog.setOnShowListener {
+        dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            .setOnClickListener {
+                val minutes = input.text.toString().toIntOrNull()
+
+                if (minutes == null ||
+                    minutes !in MIN_DURATION_MINUTES..MAX_DURATION_MINUTES
+                ) {
+                    input.error = "请输入 5 至 180 之间的分钟数"
+                    return@setOnClickListener
+                }
+
+                prefs().edit()
+                    .putInt(KEY_DURATION_MINUTES, minutes)
+                    .apply()
+
+                Toast.makeText(
+                    this,
+                    "已保存：$minutes 分钟",
+                    Toast.LENGTH_SHORT
+                ).show()
+
+                dialog.dismiss()
+            }
+    }
+
+    dialog.setOnDismissListener {
+        onClosed?.invoke()
+    }
+
+    dialog.show()
+}
+
     private fun showPasswordPrompt() {
         val input = EditText(this).apply {
             hint = "输入密码"
@@ -199,12 +267,26 @@ class MainActivity : ComponentActivity() {
         }
         val dialog = AlertDialog.Builder(this)
             .setTitle("王梓淇请休息一会")
-            .setMessage("验证通过后可使用手机 40 分钟。")
+            .setMessage(
+    "验证通过后可使用手机 ${
+        prefs().getInt(KEY_DURATION_MINUTES, DEFAULT_DURATION_MINUTES)
+            .coerceIn(MIN_DURATION_MINUTES, MAX_DURATION_MINUTES)
+    } 分钟。"
+)
             .setView(input)
             .setCancelable(false)
+            .setNeutralButton("⚙ 设置", null)
             .setPositiveButton("解锁", null)
             .create()
         dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
+    dialog.dismiss()
+    showSettingsDialog {
+        if (locked) {
+            showPasswordPrompt()
+        }
+    }
+}
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val entered = input.text.toString()
                 if (entered.length != 6 || !entered.all { it in '0'..'9' } || !verifyTotp(entered)) {
