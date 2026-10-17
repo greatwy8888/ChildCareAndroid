@@ -30,9 +30,11 @@ class UnlockTimerService : Service() {
             .getLong(MainActivity.KEY_DEADLINE, 0L)
         val deadline = intent?.getLongExtra(EXTRA_DEADLINE, stored) ?: stored
         if (deadline <= System.currentTimeMillis()) {
+            Log.i(TAG, "Stored unlock deadline is absent or expired; requesting relock")
             relock()
             return START_NOT_STICKY
         }
+        Log.i(TAG, "Usage timer started; remainingMs=${deadline - System.currentTimeMillis()}")
         startForeground(NOTIFICATION_ID, notification())
         timer?.cancel()
         timer = object : CountDownTimer(deadline - System.currentTimeMillis(), 1000L) {
@@ -43,6 +45,7 @@ class UnlockTimerService : Service() {
     }
 
     private fun relock() {
+        Log.i(TAG, "Usage timer expired; requesting lock screen activity")
         val launch = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
