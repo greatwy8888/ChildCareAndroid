@@ -22,7 +22,7 @@ GitHub Actions passing is not device evidence. This procedure records observed b
 3. Enter an incorrect or expired six-digit code; confirm the app does not unlock.
 4. Enter the current valid parent code; confirm the app reports the configured unlock duration.
 5. Open Settings and verify it requires parent verification; set a short test interval (minimum 5 minutes), then confirm the saved value persists.
-6. Start another app and wait through the full interval. Record whether the guard appears automatically. If Android blocks the background launch, verify that the persistent “休息时间到了” recovery notification appears and opens Lock Screen when tapped. This notification is a recovery fallback, **not proof of forced relock**; notification permission and OEM policy may affect visibility.
+6. Start another app and wait through the full interval. Record whether the guard appears automatically. A backup `AlarmManager.setAndAllowWhileIdle` deadline alarm is scheduled alongside the foreground service timer. If Android blocks the background launch, verify that the persistent “休息时间到了” recovery notification appears and opens Lock Screen when tapped. The backup alarm may be deferred by Android and the activity launch may still be blocked. The notification is a recovery fallback, **not proof of forced relock**; notification permission and OEM policy may affect visibility.
 7. Repeat with the screen turned off/on. Do not infer success solely from a toast or log message.
 
 ## Phase B — Device Owner / kiosk test (spare device only)
@@ -51,12 +51,13 @@ Connect the spare device over USB with Android Platform Tools installed. Use rea
 ```bat
 adb devices
 adb logcat -c
-adb logcat -v time -s MinimalGuardActivity:I MinimalGuardTimer:I MinimalGuardBoot:I
+adb logcat -v time -s MinimalGuardActivity:I MinimalGuardTimer:I MinimalGuardBoot:I MinimalGuardAlarm:I
 ```
 
 Leave the logcat window running while reproducing one test. Stop it with Ctrl+C. Review the output before sharing; never share TOTP codes, secret seeds, account identifiers, or unrelated personal logs.
 
 Useful log markers:
+- `MinimalGuardAlarm`: independent deadline fallback alarm delivery and recovery notification.
 - `MinimalGuardActivity`: activity resumed and whether the saved deadline is expired.
 - `MinimalGuardTimer`: timer started and expiry launch requested.
 - `MinimalGuardBoot`: boot/update receiver ran and attempted recovery.
