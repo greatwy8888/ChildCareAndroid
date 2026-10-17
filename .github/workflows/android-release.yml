@@ -33,6 +33,10 @@ jobs:
           mkdir -p app/build/signing
           printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > app/build/signing/lockscreen-release.jks
           chmod 600 app/build/signing/lockscreen-release.jks
+          if ! keytool -list -keystore app/build/signing/lockscreen-release.jks -storepass:env ANDROID_KEYSTORE_PASSWORD -alias "$ANDROID_KEY_ALIAS" >/dev/null 2>&1; then
+            echo "::error::Keystore cannot be opened with the configured password or alias. Check the GitHub secrets."
+            exit 1
+          fi
       - name: Run unit tests and build signed release APK
         env:
           ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
@@ -49,6 +53,7 @@ jobs:
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
           test -n "$APKSIGNER"
           "$APKSIGNER" verify --verbose --print-certs "$APK"
+          rm -f app/build/signing/lockscreen-release.jks
       - name: Upload signed release APK
         uses: actions/upload-artifact@v4
         with:
