@@ -46,6 +46,15 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        val deadline = prefs().getLong(KEY_DEADLINE, 0L)
+        if (!locked && deadline > 0L && deadline <= System.currentTimeMillis()) {
+            // Recovery path if Android/OEM blocked the timer service from bringing
+            // this activity to the foreground at the deadline.
+            prefs().edit().remove(KEY_DEADLINE).apply()
+            locked = true
+            showGuard()
+            showPasswordPrompt()
+        }
         if (locked) {
             applyImmersive()
             enforceKioskIfManaged()
@@ -341,7 +350,32 @@ private fun showSettingsDialog(onClosed: (() -> Unit)? = null) {
         return Totp.verifyBase32(secret, code, System.currentTimeMillis() / 1000L)
     }
 
-   private fun unlockForDuration() {
+    private fun unlockForDuration() {
+        val durationMinutes = prefs().getInt(
+            KEY_DURATION_MINUTES,
+            DEFAULT_DURATION_MINUTES
+        ).coerceIn(MIN_DURATION_MINUTES, MAX_DURATION_MINUTES)
+        val deadline = System.currentTimeMillis() + durationMinutes * 60_000L
+
+        // Start the timer before releasing kiosk restrictions. If starting the
+        // service throws, keep the guard active instead of leaving an untimed unlock.
+        prefs().edit().putLong(KEY_DEADLINE, deadline).apply()
+        try {
+            ContextCompat.startForegroundService(
+                this,
+                Intent(this, UnlockTimerService::class.java)
+                    .putExtra(UnlockTimerService.EXTRA_DEADLINE, deadline)
+            )
+        } catch (_: Exception) {
+            prefs().edit().remove(KEY_DEADLINE).apply()
+            locked = true
+            showGuard()
+            applyImmersive()
+            enforceKioskIfManaged()
+            Toast.makeText(this, "计时服务启动失败，手机保持锁定状态", Toast.LENGTH_LONG).show()
+            return
+        }
+
         val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
         if (dpm.isDeviceOwnerApp(packageName)) {
             try {
@@ -352,25 +386,7 @@ private fun showSettingsDialog(onClosed: (() -> Unit)? = null) {
             } catch (_: Exception) { }
         }
         locked = false
-       val durationMinutes = prefs().getInt(
-    KEY_DURATION_MINUTES,
-    DEFAULT_DURATION_MINUTES
-).coerceIn(MIN_DURATION_MINUTES, MAX_DURATION_MINUTES)
-
-val deadline = System.currentTimeMillis() + durationMinutes * 60_000L
-        prefs().edit().putLong(KEY_DEADLINE, deadline).apply()
-        try {
-            ContextCompat.startForegroundService(
-                this, Intent(this, UnlockTimerService::class.java).putExtra(UnlockTimerService.EXTRA_DEADLINE, deadline)
-            )
-        } catch (_: Exception) {
-            Toast.makeText(this, "计时服务启动失败，请检查后台运行权限", Toast.LENGTH_LONG).show()
-        }
-        Toast.makeText(
-    this,
-    "已解锁 $durationMinutes 分钟",
-    Toast.LENGTH_SHORT
-).show()
+        Toast.makeText(this, "已解锁 $durationMinutes 分钟", Toast.LENGTH_SHORT).show()
         moveTaskToBack(true)
     }
 
