@@ -19,23 +19,66 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.9"
+      - name: Prepare release signing key when all secrets are configured
+        id: signing
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$ANDROID_KEYSTORE_BASE64" && -n "$ANDROID_KEYSTORE_PASSWORD" && -n "$ANDROID_KEY_ALIAS" && -n "$ANDROID_KEY_PASSWORD" ]]; then
+            mkdir -p app/build/signing
+            printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > app/build/signing/lockscreen-release.jks
+            chmod 600 app/build/signing/lockscreen-release.jks
+            echo "release_signing_available=true" >> "$GITHUB_OUTPUT"
+            echo "Release signing key is configured."
+          else
+            echo "release_signing_available=false" >> "$GITHUB_OUTPUT"
+            echo "Release signing secrets are incomplete; building the debug APK only."
+          fi
       - name: Build and test
-        run: gradle testDebugUnitTest assembleDebug
-      - name: Report APK version and signing certificate
+        shell: bash
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          gradle testDebugUnitTest assembleDebug
+          if [[ "${{ steps.signing.outputs.release_signing_available }}" == "true" ]]; then
+            gradle assembleRelease
+          fi
+      - name: Report APK signing certificates
         shell: bash
         run: |
-          APK="app/build/outputs/apk/debug/app-debug.apk"
-          echo "APK file: $APK"
+          set -euo pipefail
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
-          if [ -z "$APKSIGNER" ]; then
+          if [[ -z "$APKSIGNER" ]]; then
             echo "::error::Android apksigner was not found in the hosted runner."
             exit 1
           fi
-          "$APKSIGNER" verify --print-certs "$APK"
-          echo "Build versionCode/versionName are configured in app/build.gradle.kts."
+          echo "Debug APK:"
+          "$APKSIGNER" verify --print-certs app/build/outputs/apk/debug/app-debug.apk
+          if [[ -f app/build/outputs/apk/release/app-release.apk ]]; then
+            echo "Release APK:"
+            "$APKSIGNER" verify --print-certs app/build/outputs/apk/release/app-release.apk
+          else
+            echo "No release APK was produced because release signing secrets were incomplete."
+          fi
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: ChildCareAndroid-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+      - name: Upload signed release APK
+        if: steps.signing.outputs.release_signing_available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChildCareAndroid-release-signed
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
