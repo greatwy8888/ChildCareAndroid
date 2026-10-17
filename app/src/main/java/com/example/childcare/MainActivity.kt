@@ -47,13 +47,16 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         val deadline = prefs().getLong(KEY_DEADLINE, 0L)
-        if (!locked && deadline > 0L && deadline <= System.currentTimeMillis()) {
-            // Recovery path if Android/OEM blocked the timer service from bringing
-            // this activity to the foreground at the deadline.
+        if (deadline > 0L && deadline <= System.currentTimeMillis()) {
+            // The service leaves the expired deadline in place because Android may
+            // silently block a background activity launch without throwing.
+            // Consume the deadline here, when the lock activity is actually resumed.
+            if (!locked) {
+                locked = true
+                showGuard()
+                showPasswordPrompt()
+            }
             prefs().edit().remove(KEY_DEADLINE).apply()
-            locked = true
-            showGuard()
-            showPasswordPrompt()
         }
         if (locked) {
             applyImmersive()
