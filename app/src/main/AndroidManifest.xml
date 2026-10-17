@@ -5,7 +5,7 @@
     <application
         android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
-        android:label="lock screen"
+        android:label="lock screen TEST"
         android:theme="@android:style/Theme.Material.Light.NoActionBar">
         <activity
             android:name=".MainActivity"
@@ -19,7 +19,7 @@
         </activity>
         <receiver
             android:name=".AdminReceiver"
-            android:label="lock screen device admin"
+            android:label="lock screen TEST device admin"
             android:permission="android.permission.BIND_DEVICE_ADMIN"
             android:exported="true">
             <meta-data android:name="android.app.device_admin" android:resource="@xml/device_admin" />
