@@ -11,6 +11,7 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action !in setOf(Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED)) return
         // After every boot/update, discard any previous session and start in the locked state.
+        // On boot/update, discard any prior session so the app returns to its locked state.
         context.getSharedPreferences(MainActivity.PREFS, Context.MODE_PRIVATE)
             .edit().remove(MainActivity.KEY_DEADLINE).apply()
         val dpm = context.getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
