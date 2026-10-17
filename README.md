@@ -48,4 +48,4 @@
 
 TOTP 算法现已独立到 `Totp.kt`，并新增 RFC 6238 单元测试。该改动仅改善算法可测试性，**没有解决 APK 内硬编码 TOTP 密钥可被提取的问题**。正式使用前仍需设计安全的密钥轮换和恢复流程。
 
-迁移限制、风险和迁移前检查表见 [SECURITY_AND_MIGRATION.md](SECURITY_AND_MIGRATION.md)。在这些检查完成前，请勿在日常保护手机上安装测试包或更改现有 Device Owner 状态。
+迁移限制、风险和迁移前检查表见 [SECURITY_AND_MIGRATION.md](SECURITY_AND_MIGRATION.md)。备用设备实测步骤、只读日志采集命令和停止条件见 [docs/SAFE_PHYSICAL_DEVICE_TEST.md](docs/SAFE_PHYSICAL_DEVICE_TEST.md)。在这些检查完成前，请勿在日常保护手机上安装测试包或更改现有 Device Owner 状态。
