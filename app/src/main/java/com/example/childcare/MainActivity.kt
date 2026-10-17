@@ -2,6 +2,7 @@ package com.example.childcare
 
 import android.app.ActivityManager
 import android.app.AlertDialog
+import android.app.NotificationManager
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
@@ -80,6 +81,9 @@ class MainActivity : ComponentActivity() {
                 showPasswordPrompt()
             }
             prefs().edit().remove(KEY_DEADLINE).apply()
+            // The guard has resumed, so the fallback notification is no longer needed.
+            getSystemService(NotificationManager::class.java)
+                .cancel(UnlockTimerService.EXPIRED_NOTIFICATION_ID)
         }
         if (locked) {
             applyImmersive()
