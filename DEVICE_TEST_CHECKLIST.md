@@ -15,12 +15,13 @@ This checklist is for a **spare Android device or a test profile that can be wip
 1. **Basic unlock:** Generate a current six-digit TOTP. Verify valid codes unlock, malformed/wrong codes do not, and expired codes are rejected.
 2. **Duration setting:** Verify default is 40 minutes; accept 5 and 180; reject 4, 181, blank, and non-numeric input.
 3. **Timer lifecycle:** On a test-only build or controlled short test configuration, unlock, background the app, and verify the service notification remains visible and the timer reaches its deadline.
-4. **Deadline relock:** At expiry, verify the guard actually becomes foreground while another app is open. Do not count a successful CI build or a non-throwing `startActivity()` call as proof.
-5. **Return-to-app fallback:** If automatic foreground relock is blocked, return to the app and verify the expired deadline triggers the guard before normal use continues.
-6. **Reboot:** Reboot during locked and unlocked states. Confirm the app returns to locked state and that policy restrictions are reapplied. Repeat on the target OEM because boot activity launches can be restricted.
-7. **Home/Overview:** While the app is Device Owner and Lock Task is active, test Home, Overview/Recents, notifications, Settings entry points, and power-menu behavior.
-8. **Process death:** Force-stop is not equivalent to normal process reclamation and may be blocked for a Device Owner app. Separately test low-memory process recreation and confirm the persisted deadline is handled.
-9. **Uninstall recovery:** Do not test uninstall on the child's phone. On a disposable test device, document the exact Device Owner release/removal path before enabling any uninstall authorization UI.
+4. **Re-entry during active unlock (known issue tracked in [#2](https://github.com/greatwy8888/ChildCareAndroid/issues/2)):** Unlock, reopen the app from its icon and tap the timer notification before the deadline. The device must remain in the same authorized window and must not demand a new TOTP early. Current code audit indicates this may fail; do not mark passed until fixed and retested.
+5. **Deadline relock:** At expiry, verify the guard actually becomes foreground while another app is open. Do not count a successful CI build or a non-throwing `startActivity()` call as proof.
+6. **Return-to-app fallback:** If automatic foreground relock is blocked, return to the app and verify the expired deadline triggers the guard before normal use continues.
+7. **Reboot:** Reboot during locked and unlocked states. Confirm the app returns to locked state and that policy restrictions are reapplied. Repeat on the target OEM because boot activity launches can be restricted.
+8. **Home/Overview:** While the app is Device Owner and Lock Task is active, test Home, Overview/Recents, notifications, Settings entry points, and power-menu behavior.
+9. **Process death:** Force-stop is not equivalent to normal process reclamation and may be blocked for a Device Owner app. Separately test low-memory process recreation and confirm the persisted deadline is handled.
+10. **Uninstall recovery:** Do not test uninstall on the child's phone. On a disposable test device, document the exact Device Owner release/removal path before enabling any uninstall authorization UI.
 
 ## Pass/fail recording
 
