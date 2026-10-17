@@ -212,7 +212,7 @@ class MainActivity : ComponentActivity() {
                     return@setOnClickListener
                 }
                 dialog.dismiss()
-                unlockForFortyMinutes()
+                unlockForDuration()
             }
         }
         dialog.show()
@@ -269,7 +269,12 @@ class MainActivity : ComponentActivity() {
             } catch (_: Exception) { }
         }
         locked = false
-        val deadline = System.currentTimeMillis() + UNLOCK_MS
+       val durationMinutes = prefs().getInt(
+    KEY_DURATION_MINUTES,
+    DEFAULT_DURATION_MINUTES
+).coerceIn(MIN_DURATION_MINUTES, MAX_DURATION_MINUTES)
+
+val deadline = System.currentTimeMillis() + durationMinutes * 60_000L
         prefs().edit().putLong(KEY_DEADLINE, deadline).apply()
         try {
             ContextCompat.startForegroundService(
@@ -278,7 +283,11 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) {
             Toast.makeText(this, "计时服务启动失败，请检查后台运行权限", Toast.LENGTH_LONG).show()
         }
-        Toast.makeText(this, "已解锁 40 分钟", Toast.LENGTH_SHORT).show()
+        Toast.makeText(
+    this,
+    "已解锁 $durationMinutes 分钟",
+    Toast.LENGTH_SHORT
+).show()
         moveTaskToBack(true)
     }
 
