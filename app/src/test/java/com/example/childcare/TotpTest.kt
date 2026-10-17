@@ -32,8 +32,16 @@ class TotpTest {
     }
 
     @Test
+    fun base32RejectsNonZeroUnusedTrailingBits() {
+        assertTrue(Totp.decodeBase32("MY")!!.contentEquals(byteArrayOf(0x66)))
+        assertTrue(Totp.decodeBase32("MY======")!!.contentEquals(byteArrayOf(0x66)))
+        assertEquals(null, Totp.decodeBase32("AB"))
+    }
+
+    @Test
     fun verifyRejectsMalformedCodesAndSecrets() {
         assertFalse(Totp.verifyBase32("NOT!BASE32", "123456", 59L))
+        assertFalse(Totp.verifyBase32("AB", "123456", 59L))
         assertFalse(Totp.verifyBase32("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "12345", 59L))
         assertFalse(Totp.verifyBase32("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", "12A456", 59L))
     }
