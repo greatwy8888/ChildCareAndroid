@@ -19,6 +19,18 @@ jobs:
           gradle-version: "8.9"
       - name: Build and test
         run: gradle testDebugUnitTest assembleDebug
+      - name: Report APK version and signing certificate
+        shell: bash
+        run: |
+          APK="app/build/outputs/apk/debug/app-debug.apk"
+          echo "APK file: $APK"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -n 1)"
+          if [ -z "$APKSIGNER" ]; then
+            echo "::error::Android apksigner was not found in the hosted runner."
+            exit 1
+          fi
+          "$APKSIGNER" verify --print-certs "$APK"
+          echo "Build versionCode/versionName are configured in app/build.gradle.kts."
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
