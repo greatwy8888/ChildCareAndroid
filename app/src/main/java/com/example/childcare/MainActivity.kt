@@ -338,42 +338,7 @@ private fun showSettingsDialog(onClosed: (() -> Unit)? = null) {
 
     private fun verifyTotp(code: String): Boolean {
         val secret = "3XJSD7D2YTLONRMPETS6NG5VP4M6JPXU"
-        val key = decodeBase32(secret) ?: return false
-        val now = System.currentTimeMillis() / 1000L
-        return (-1L..1L).any { offset ->
-            totpCode(key, now / 30L + offset) == code
-        }
-    }
-
-    private fun totpCode(key: ByteArray, counter: Long): String {
-        val data = java.nio.ByteBuffer.allocate(8).putLong(counter).array()
-        val mac = javax.crypto.Mac.getInstance("HmacSHA1")
-        mac.init(javax.crypto.spec.SecretKeySpec(key, "HmacSHA1"))
-        val hash = mac.doFinal(data)
-        val offset = hash[hash.size - 1].toInt() and 0x0f
-        val binary = ((hash[offset].toInt() and 0x7f) shl 24) or
-            ((hash[offset + 1].toInt() and 0xff) shl 16) or
-            ((hash[offset + 2].toInt() and 0xff) shl 8) or
-            (hash[offset + 3].toInt() and 0xff)
-        return (binary % 1_000_000).toString().padStart(6, '0')
-    }
-
-    private fun decodeBase32(input: String): ByteArray? {
-        val alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567"
-        val cleaned = input.filterNot { it.isWhitespace() || it == '=' }.uppercase(java.util.Locale.ROOT)
-        if (cleaned.isEmpty() || cleaned.any { alphabet.indexOf(it) < 0 }) return null
-        val output = java.io.ByteArrayOutputStream()
-        var buffer = 0
-        var bits = 0
-        for (ch in cleaned) {
-            buffer = (buffer shl 5) or alphabet.indexOf(ch)
-            bits += 5
-            if (bits >= 8) {
-                bits -= 8
-                output.write((buffer shr bits) and 0xff)
-            }
-        }
-        return output.toByteArray().takeIf { it.isNotEmpty() }
+        return Totp.verifyBase32(secret, code, System.currentTimeMillis() / 1000L)
     }
 
    private fun unlockForDuration() {
