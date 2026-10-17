@@ -33,6 +33,16 @@ class MainActivity : ComponentActivity() {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
         }
+
+        // A recreated activity must respect an existing, still-valid unlock window.
+        // Do not briefly show the guard or prompt for TOTP while authorization is active.
+        val deadline = prefs().getLong(KEY_DEADLINE, 0L)
+        if (deadline > System.currentTimeMillis()) {
+            locked = false
+            finish()
+            return
+        }
+
         showGuard()
         showPasswordPrompt()
     }
@@ -40,6 +50,16 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+
+        // Launcher and timer-notification intents must not end an authorized
+        // usage window early. The persisted deadline is the source of truth.
+        val deadline = prefs().getLong(KEY_DEADLINE, 0L)
+        if (deadline > System.currentTimeMillis()) {
+            locked = false
+            moveTaskToBack(true)
+            return
+        }
+
         showGuard()
         showPasswordPrompt()
     }
