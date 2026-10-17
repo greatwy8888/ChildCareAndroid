@@ -1,5 +1,6 @@
 package com.example.childcare
 
+import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -38,6 +39,7 @@ class UnlockTimerService : Service() {
             return START_NOT_STICKY
         }
         Log.i(TAG, "Usage timer started; remainingMs=${deadline - System.currentTimeMillis()}")
+        scheduleDeadlineFallback(deadline)
         startForeground(NOTIFICATION_ID, notification())
         timer?.cancel()
         timer = object : CountDownTimer(deadline - System.currentTimeMillis(), 1000L) {
@@ -48,6 +50,7 @@ class UnlockTimerService : Service() {
     }
 
     private fun relock() {
+        cancelDeadlineFallback()
         Log.i(TAG, "Usage timer expired; requesting lock screen activity")
         // Post before requesting the activity to avoid a race where MainActivity
         // resumes and cancels the notification just before it is posted.
@@ -68,6 +71,30 @@ class UnlockTimerService : Service() {
         // remains persisted until MainActivity actually resumes.
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    // Backup wake-up in case the foreground service is stopped by OEM power management.
+    // Android can defer this alarm and may still block background activity launches.
+    private fun scheduleDeadlineFallback(deadline: Long) {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val pending = PendingIntent.getBroadcast(
+            this, EXPIRED_NOTIFICATION_ID,
+            Intent(this, TimerDeadlineReceiver::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, deadline, pending)
+        Log.i(TAG, "Independent deadline fallback scheduled")
+    }
+
+    private fun cancelDeadlineFallback() {
+        val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val pending = PendingIntent.getBroadcast(
+            this, EXPIRED_NOTIFICATION_ID,
+            Intent(this, TimerDeadlineReceiver::class.java),
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pending)
+        pending.cancel()
     }
 
     private fun expiryNotification(): Notification {
