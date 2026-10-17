@@ -1,10 +1,12 @@
 package com.example.childcare
 
+import android.Manifest
 import android.app.ActivityManager
 import android.app.AlertDialog
 import android.app.NotificationManager
 import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
+import android.content.pm.PackageManager
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -45,6 +47,11 @@ class MainActivity : ComponentActivity() {
             return
         }
 
+        if (Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 7301)
+        }
         showGuard()
         showPasswordPrompt()
     }
