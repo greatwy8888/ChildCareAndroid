@@ -1,45 +1,41 @@
-# lock screen Android App
+# Lock Screen — 隔离测试分支
 
-极简功能：
-- 开机后通过 BOOT_COMPLETED 接收器尝试显示全屏保护界面；荣耀手机需要手动允许自启动和后台运行。
-- 使用 Google Authenticator 兼容的 TOTP 六位动态密码解锁，时间步长 30 秒，允许前后一个时间步长以容忍少量时钟偏差。
-- 输入正确密码后正常使用手机 40 分钟。
-- 40 分钟到期后尝试重新显示全屏保护界面。
-- Device Owner 模式下启用 Lock Task kiosk，并在保护界面恢复到前台时再次检查锁定状态；Android 9 及以上尝试禁用 Home/最近任务等 Lock Task 系统功能。普通安装无法可靠阻止 Home、最近任务或系统设置绕过。
+> **重要：这是独立测试包，不是已安装的保护版升级包。不要将它配置为日常手机的 Device Owner，也不要为测试而卸载旧版、清除数据或解除现有管理。**
 
-## 构建 APK
-GitHub Actions 自动运行 gradle testDebugUnitTest assembleDebug，然后在 Actions → Android APK → 对应运行记录 → Artifacts 下载 ChildCareAndroid-debug，解压得到 app-debug.apk。
+## 本分支目的
 
-Actions 页面：https://github.com/greatwy8888/ChildCareAndroid/actions
+本分支从 `feature/totp-protected-settings` 创建，用于在不覆盖现有安装的前提下，验证新版代码是否能够构建及进行功能测试。
 
-## 安装与设备所有者模式
-先安装 APK，再在满足系统条件时执行：
-    adb install app-debug.apk
-    adb shell dpm set-device-owner com.example.childcare/.AdminReceiver
+- 应用显示名称：`lock screen TEST`
+- 测试包名：`com.example.childcare.next`
+- 测试版本：`0.1.0-test`（versionCode 1）
+- 原保护版包名仍为：`com.example.childcare`
+- 原有安装和 `main` 分支不由本分支修改。
 
-Device Owner 通常要求设备处于适合配置的初始状态，可能需要恢复出厂设置。恢复出厂设置会清除数据；操作前请备份。不要在没有可用 APK 和恢复方案时重置日常手机。配置完成后，保护界面才可使用系统级 Lock Task kiosk 限制 Home/最近任务；仅安装 APK 或只授予普通设备管理员权限不够。解锁时应用会退出 Lock Task，40 分钟后重新进入保护界面时再尝试启用。
+## 构建
 
-## 荣耀手机开机启动排查
+GitHub Actions → Android APK → 对应本分支的运行记录 → Artifacts，下载 `ChildCareAndroid-debug` 并解压得到 `app-debug.apk`。
 
-1. 安装后至少手动打开一次 App，并完成首次设置密码；Android 对从未启动过或被“强行停止”的应用可能不投递开机广播。
-2. 在系统设置中为“lock screen”允许“自启动/自动启动”“后台活动/后台运行”，并将电池用量设为“不受限制”（各 MagicOS 版本名称可能不同）。
-3. 不要在应用信息页点“强行停止”；强行停止后通常要手动再次打开应用，系统才会恢复广播。
-4. 重启后如果仍不自动出现，普通 APK 无法绕过系统对后台启动 Activity 的限制。要实现更可靠的开机即锁定，需要在支持的设备上配置 Device Owner / Lock Task，并在真实手机上验证；仅安装 APK 不能保证。
+Actions 页面： https://github.com/greatwy8888/ChildCareAndroid/actions
 
-## 界面与卸载限制
-- 应用名称显示为 lock screen；保护界面采用深色卡片布局，显示“友情提示：”和“王梓淇请休息一会”。解锁提示不再显示谷歌验证器相关说明。
-- 普通 APK 无法要求 Android 系统卸载界面输入本应用的动态密码。只有配置为 Device Owner 后，本应用才会通过系统策略阻止卸载；启用后通常不能直接从系统设置卸载，需由设备管理员按预先准备的恢复方案解除管理。请只在你拥有并负责管理的设备上启用。
+构建成功仅代表编译和配置检查通过，不代表已经在荣耀手机上验证了锁屏、开机启动、计时或防绕过行为。
 
-## 测试重点
-1. 使用 Google Authenticator 添加应用中配置的密钥，确认生成的六位动态密码可以解锁。
-2. 空输入、非六位数字以及错误或过期动态密码均不能解锁。
-3. 解锁后可使用其他应用。
-4. 约 40 分钟后保护界面重新出现。
-5. 重启后保护界面恢复。
-6. 在真实荣耀手机上测试后台运行、开机启动和到期重新锁定。
+## 安全边界
 
-## 限制与安全
-- 这是初始极简实现，尚未在真实设备上验证。Android / 荣耀 MagicOS 可能限制开机后启动 Activity、后台启动 Activity 或计时服务；不能保证普通 APK 强制弹出并锁住其他应用。
-- Device Owner + Lock Task 可提高锁定可靠性，但仍须实机测试。
-- TOTP 密钥按需求固定写在 APK 中；懂得逆向 APK 的人可能提取该密钥。
-- 当前为 Debug APK，适合测试，不是面向公开发布的正式签名版本。
+1. 不要在孩子的日常保护手机上安装或启用此测试包，直到完成代码审查和备用设备验证。
+2. 不要对测试包执行 `dpm set-device-owner`，也不要尝试让它取代原保护版。
+3. 不要卸载原保护版、清除其数据、解除 Device Owner 或恢复出厂设置来“试试看”。
+4. 独立包名不会继承原应用的 Device Owner 身份、应用数据或系统策略。
+5. 如果找回原始签名私钥，仍应优先对原包名进行签名兼容升级；独立测试包不是升级签名的替代品。
+6. 此分支不包含迁移授权流程，也不保证所有功能已经实机验证。
+
+## 验证清单
+
+- [ ] GitHub Actions 构建和单元测试成功
+- [ ] APK 包名确认为 `com.example.childcare.next`
+- [ ] APK 显示名称确认为 `lock screen TEST`
+- [ ] 在备用测试设备验证 TOTP 正确/错误输入
+- [ ] 验证设定计时与到期重新锁定
+- [ ] 验证重启行为和系统限制
+- [ ] 记录测试结果并审查所有失败项
+- [ ] 在讨论任何正式迁移前准备备份和恢复方案
