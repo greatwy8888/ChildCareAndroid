@@ -39,3 +39,10 @@ Actions 页面： https://github.com/greatwy8888/ChildCareAndroid/actions
 - [ ] 验证重启行为和系统限制
 - [ ] 记录测试结果并审查所有失败项
 - [ ] 在讨论任何正式迁移前准备备份和恢复方案
+
+
+## 最新安全审查说明
+
+TOTP 算法现已独立到 `Totp.kt`，并新增 RFC 6238 单元测试。该改动仅改善算法可测试性，**没有解决 APK 内硬编码 TOTP 密钥可被提取的问题**。正式使用前仍需设计安全的密钥轮换和恢复流程。
+
+迁移限制、风险和迁移前检查表见 [SECURITY_AND_MIGRATION.md](SECURITY_AND_MIGRATION.md)。在这些检查完成前，请勿在日常保护手机上安装测试包或更改现有 Device Owner 状态。
