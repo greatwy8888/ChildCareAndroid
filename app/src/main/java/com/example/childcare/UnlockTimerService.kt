@@ -31,6 +31,9 @@ class UnlockTimerService : Service() {
         val deadline = intent?.getLongExtra(EXTRA_DEADLINE, stored) ?: stored
         if (deadline <= System.currentTimeMillis()) {
             Log.i(TAG, "Stored unlock deadline is absent or expired; requesting relock")
+            // A service started via startForegroundService() must promote itself
+            // promptly even when the saved deadline is already expired.
+            startForeground(NOTIFICATION_ID, notification())
             relock()
             return START_NOT_STICKY
         }
