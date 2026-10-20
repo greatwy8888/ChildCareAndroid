@@ -45,7 +45,7 @@ class MainActivity : ComponentActivity() {
         settings()
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
+    override fun onBackPressed() {\n        if (viewingFullscreenImage) { viewingFullscreenImage = false; home() } else super.onBackPressed()\n    }\n\n    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         File(filesDir, "private_media").mkdirs()
         if (prefs.getString("password_hash", null).isNullOrBlank()) setup() else login()
@@ -352,22 +352,31 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) { false }
     }
 
+    @Suppress("DEPRECATION")
     private fun openItem(item: Item) {
         val file = File(filesDir, item.path)
         if (!file.exists()) { toast("文件不存在"); return }
-        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.BLACK) }
-        root.addView(btn("‹ 返回", false) { home() })
         if (item.mime.startsWith("video/")) {
+            viewingFullscreenImage = false
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.BLACK) }
             val v = VideoView(this)
             v.setVideoURI(Uri.fromFile(file)); v.setMediaController(MediaController(this))
-            root.addView(v, LinearLayout.LayoutParams(-1, 0, 1f)); v.setOnPreparedListener { v.start() }
+            root.addView(v, LinearLayout.LayoutParams(-1, -1))
+            v.setOnPreparedListener { v.start() }
+            setContentView(root)
         } else {
+            viewingFullscreenImage = true
+            window.setFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN, android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
             val image = ImageView(this).apply {
-                setImageBitmap(BitmapFactory.decodeFile(file.absolutePath)); scaleType = ImageView.ScaleType.FIT_CENTER
+                setBackgroundColor(Color.BLACK)
+                scaleType = ImageView.ScaleType.FIT_CENTER
+                setImageBitmap(BitmapFactory.decodeFile(file.absolutePath))
+                contentDescription = item.name
             }
-            root.addView(image, LinearLayout.LayoutParams(-1, 0, 1f))
+            setContentView(image)
         }
-        setContentView(root)
     }
 
     private fun hash(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray(Charsets.UTF_8))
