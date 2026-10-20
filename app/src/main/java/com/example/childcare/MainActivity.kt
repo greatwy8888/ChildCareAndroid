@@ -208,22 +208,43 @@ class MainActivity : ComponentActivity() {
         return LinearLayout(this).apply { setPadding(0, 0, 0, dp(8)); addView(row) }
     }
 
-    private fun itemRow(item: Item): View {
-        val row = LinearLayout(this).apply {
-            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(8), dp(10)); background = bg(Color.WHITE)
+    private fun thumbnailTile(item: Item): View {
+        val file = File(filesDir, item.path)
+        val frame = FrameLayout(this).apply {
+            background = bg(Color.WHITE, 14); clipToOutline = true; elevation = dp(1).toFloat()
         }
-        row.addView(text(if (item.mime.startsWith("video/")) "▶" else "▧", 24f, blue, true), LinearLayout.LayoutParams(dp(42), dp(46)))
-        val detail = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(8), 0, dp(4), 0) }
-        detail.addView(text(item.name, 13f, ink, true))
-        detail.addView(text(if (item.mime.startsWith("video/")) "视频 · 点击播放" else "照片 · 点击查看", 12f, muted))
-        row.addView(detail, LinearLayout.LayoutParams(0, -2, 1f))
-        row.addView(btn("删除") { AlertDialog.Builder(this).setTitle("删除文件？")
-            .setMessage("确定从私密相册中永久删除“" + item.name + "”吗？")
-            .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
-                File(filesDir, item.path).delete(); saveItems(items().filterNot { it.id == item.id }); home()
-            }.show() })
-        row.setOnClickListener { openItem(item) }
-        return LinearLayout(this).apply { setPadding(0, 0, 0, dp(8)); addView(row) }
+        val image = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            if (item.mime.startsWith("image/")) {
+                try {
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeFile(file.absolutePath, bounds)
+                    val opts = BitmapFactory.Options()
+                    opts.inSampleSize = maxOf(1, minOf(bounds.outWidth / 300, bounds.outHeight / 300))
+                    setImageBitmap(BitmapFactory.decodeFile(file.absolutePath, opts))
+                } catch (_: Exception) { setImageDrawable(ColorDrawable(0xFFE5ECF7.toInt())) }
+            } else setImageDrawable(ColorDrawable(0xFF263B63.toInt()))
+        }
+        frame.addView(image, FrameLayout.LayoutParams(-1, -1))
+        if (item.mime.startsWith("video/")) {
+            val badge = TextView(this).apply {
+                text = "▶ 视频"; textSize = 11f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+                background = bg(0x99000000.toInt(), 9); setPadding(dp(7), dp(4), dp(7), dp(4))
+            }
+            frame.addView(badge, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(6), 0, 0, dp(6)) })
+        }
+        frame.setOnClickListener { openItem(item) }
+        frame.setOnLongClickListener {
+            AlertDialog.Builder(this).setTitle(item.name).setItems(arrayOf("查看", "删除")) { _, which ->
+                if (which == 0) openItem(item) else AlertDialog.Builder(this).setTitle("删除文件？")
+                    .setMessage("确定从雄哥相册中永久删除此文件吗？")
+                    .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
+                        file.delete(); saveItems(items().filterNot { it.id == item.id }); home()
+                    }.show()
+            }.show()
+            true
+        }
+        return frame
     }
 
     private fun createFolder() {
