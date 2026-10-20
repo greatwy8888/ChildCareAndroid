@@ -288,7 +288,8 @@ class MainActivity : ComponentActivity() {
         dialog.show()
     }
 
-    private fun importFile(uri: Uri): Boolean = try {
+    private fun importFile(uri: Uri): Boolean {
+        return try {
         val mime = contentResolver.getType(uri) ?: return false
         if (!mime.startsWith("image/") && !mime.startsWith("video/")) return false
         var name = "媒体文件"
@@ -301,7 +302,8 @@ class MainActivity : ComponentActivity() {
         contentResolver.openInputStream(uri)?.use { input -> File(filesDir, rel).outputStream().use { output -> input.copyTo(output) } } ?: return false
         saveItems(items() + Item(id, name, rel, mime, folder, System.currentTimeMillis()))
         true
-    } catch (_: Exception) { false }
+        } catch (_: Exception) { false }
+    }
 
     private fun openItem(item: Item) {
         val file = File(filesDir, item.path)
