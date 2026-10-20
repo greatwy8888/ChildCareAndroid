@@ -5,7 +5,7 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
-import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.GradientDrawable\nimport android.graphics.drawable.ColorDrawable\nimport android.widget.GridLayout
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -23,7 +23,7 @@ import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     private val prefs by lazy { getSharedPreferences("private_gallery", Context.MODE_PRIVATE) }
-    private var folder = "root"
+    private var folder = "root"\n    private var viewingFullscreenImage = false
     private val blue = Color.rgb(55, 126, 245)
     private val ink = Color.rgb(32, 44, 68)
     private val muted = Color.rgb(112, 126, 149)
@@ -107,27 +107,36 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun login() {
-        val c = col()
-        val bitmap = BitmapFactory.decodeFile(File(filesDir, "login_bg").absolutePath)
-        if (bitmap != null) c.background = BitmapDrawable(resources, bitmap)
-        c.gravity = Gravity.CENTER_VERTICAL
-        val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(26), dp(22), dp(26)); background = bg(Color.WHITE, 24)
+        val root = FrameLayout(this).apply { setBackgroundColor(pale) }
+        val bgFile = File(filesDir, "login_bg")
+        if (bgFile.exists()) {
+            val backgroundImage = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setImageBitmap(BitmapFactory.decodeFile(bgFile.absolutePath))
+            }
+            root.addView(backgroundImage, FrameLayout.LayoutParams(-1, -1))
+        } else {
+            root.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(33,111,232), Color.rgb(116,92,246), Color.rgb(229,241,255)))
         }
-        card.addView(text("◉  私密相册", 29f, blue, true)); gap(card, 8)
-        card.addView(text("珍藏每一份美好回忆", 14f, muted)); gap(card, 24)
+        root.addView(View(this).apply { setBackgroundColor(0x440C2148) }, FrameLayout.LayoutParams(-1, -1))
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(28), dp(24), dp(28))
+            background = bg(0xF7FFFFFF.toInt(), 26); elevation = dp(10).toFloat()
+        }
+        card.addView(text("◈", 42f, blue, true).apply { gravity = Gravity.CENTER })
+        card.addView(text("雄哥相册", 29f, ink, true).apply { gravity = Gravity.CENTER }); gap(card, 5)
+        card.addView(text("珍藏每一份美好回忆", 14f, muted).apply { gravity = Gravity.CENTER }); gap(card, 26)
         val user = field("用户名").apply { setText(prefs.getString("username", "admin")) }
         val p = field("登录密码", true)
         addField(card, user); addField(card, p)
-        card.addView(btn("登录", true) {
-            if (user.text.toString().trim() == prefs.getString("username", "admin") &&
-                hash(p.text.toString()) == prefs.getString("password_hash", "")) home()
+        card.addView(btn("登 录", true) {
+            if (user.text.toString().trim() == prefs.getString("username", "admin") && hash(p.text.toString()) == prefs.getString("password_hash", "")) home()
             else p.error = "用户名或密码不正确"
         })
-        gap(card, 12)
-        card.addView(btn("自定义登录背景图片") { bgPicker.launch(arrayOf("image/*")) })
-        c.addView(card, LinearLayout.LayoutParams(-1, -2))
-        page(c)
+        gap(card, 18)
+        card.addView(text("本地存储 · 私密管理", 12f, muted).apply { gravity = Gravity.CENTER })
+        root.addView(card, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER).apply { setMargins(dp(28), dp(28), dp(28), dp(28)) })
+        setContentView(root)
     }
 
     private data class Item(val id: String, val name: String, val path: String, val mime: String, val folder: String, val time: Long) {
