@@ -1,27 +1,23 @@
-import java.util.Base64
-
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
 }
 
-val releaseStoreFile = layout.buildDirectory.file("signing/lockscreen-release.jks").get().asFile
+val releaseStoreFile = layout.buildDirectory.file("signing/private-gallery-release.jks").get().asFile
 val releaseStorePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
 val releaseKeyAlias = System.getenv("ANDROID_KEY_ALIAS")
 val releaseKeyPassword = System.getenv("ANDROID_KEY_PASSWORD")
 val releaseStoreBase64 = System.getenv("ANDROID_KEYSTORE_BASE64")
 
-// The workflow decodes the keystore into the build directory only when all secrets exist.
 android {
     namespace = "com.example.childcare"
     compileSdk = 35
     defaultConfig {
-        // Isolated package: this test build must never replace the installed Device Owner app.
-        applicationId = "com.example.childcare.next"
+        applicationId = "com.example.privategallery"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
-        versionName = "0.1.0-test"
+        versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     signingConfigs {
@@ -44,9 +40,7 @@ android {
                 !releaseKeyAlias.isNullOrBlank() &&
                 !releaseKeyPassword.isNullOrBlank() &&
                 !releaseStoreBase64.isNullOrBlank()
-            ) {
-                signingConfig = signingConfigs.getByName("release")
-            }
+            ) signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
