@@ -419,14 +419,41 @@ class MainActivity : ComponentActivity() {
 
     private fun settings() {
         val c = col()
-        c.addView(text("设置", 26f, ink, true)); gap(c, 18)
-        c.addView(btn("修改登录密码") { changePassword() }); gap(c)
-        c.addView(btn("更换登录背景图片") { bgPicker.launch(arrayOf("image/*")) }); gap(c)
-        c.addView(btn("返回相册", true) { home() }); gap(c, 24)
-        c.addView(text("隐私说明", 17f, ink, true)); gap(c, 8)
-        c.addView(text("导入的照片和视频会复制到 App 私有目录，与系统相册独立保存。从系统相册删除原图不会删除这里的副本。卸载 App 或清除 App 数据会删除本地文件，请提前备份。", 14f, muted))
-        gap(c, 18); c.addView(btn("退出登录") { login() })
+        c.setPadding(dp(18), dp(22), dp(18), dp(26))
+        c.addView(text("设置", 27f, ink, true))
+        c.addView(text("个性化你的私密相册", 13f, muted)); gap(c, 20)
+        c.addView(text("账号与安全", 14f, muted, true)); gap(c, 8)
+        c.addView(settingRow("🔐", "修改密码", "定期更新登录密码") { changePassword() }); gap(c, 8)
+        c.addView(settingRow("🖼", "更换登录背景", "使用你喜欢的图片") { bgPicker.launch(arrayOf("image/*")) }); gap(c, 18)
+        c.addView(text("存储与隐私", 14f, muted, true)); gap(c, 8)
+        c.addView(settingRow("🛡", "本地隐私保护", "媒体仅保存在应用私有目录") {
+            AlertDialog.Builder(this).setTitle("本地隐私保护")
+                .setMessage("导入的照片和视频会复制到雄哥相册的私有目录，与系统相册独立保存。从系统相册删除原图不会删除这里的副本。卸载 App 或清除 App 数据会删除本地文件，请提前备份。")
+                .setPositiveButton("知道了", null).show()
+        }); gap(c, 8)
+        c.addView(settingRow("ℹ", "关于雄哥相册", "版本 1.2.0 · 私密本地相册") {
+            AlertDialog.Builder(this).setTitle("雄哥相册")
+                .setMessage("珍藏美好 · 私密相册\n\n照片与视频在本机独立保存，不会自动上传云端。请妥善保管登录密码，并注意备份重要文件。")
+                .setPositiveButton("确定", null).show()
+        }); gap(c, 18)
+        c.addView(btn("返回相册", true) { folder = "root"; home() }); gap(c, 10)
+        c.addView(btn("退出登录") { login() })
         page(c)
+    }
+
+    private fun settingRow(symbol: String, title: String, subtitle: String, action: () -> Unit): View {
+        val row = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(13), dp(12), dp(13))
+            background = bg(Color.WHITE, 16)
+        }
+        row.addView(text(symbol, 24f, blue, true), LinearLayout.LayoutParams(dp(48), dp(46)))
+        val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        info.addView(text(title, 15f, ink, true))
+        info.addView(text(subtitle, 12f, muted))
+        row.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(text("›", 25f, muted))
+        row.setOnClickListener { action() }
+        return row
     }
 
     private fun changePassword() {
