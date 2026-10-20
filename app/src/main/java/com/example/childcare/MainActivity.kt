@@ -188,9 +188,26 @@ class MainActivity : ComponentActivity() {
         c.addView(text(if (folder == "root") "最近添加" else "文件列表", 18f, ink, true)); gap(c, 8)
         val visible = if (folder == "root") list.sortedByDescending { it.time } else list.filter { it.folder == folder }.sortedByDescending { it.time }
         if (visible.isEmpty()) {
-            c.addView(text("▧", 34f, blue, true)); c.addView(text("这里还没有文件", 16f, ink, true))
-            c.addView(text("点击上方按钮导入照片或视频", 13f, muted))
-        } else visible.forEach { c.addView(itemRow(it)) }
+            val empty = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(16), dp(44), dp(16), dp(44))
+                background = bg(Color.WHITE, 22)
+            }
+            empty.addView(text("▧", 48f, blue, true).apply { gravity = Gravity.CENTER })
+            empty.addView(text("还没有照片或视频", 17f, ink, true).apply { gravity = Gravity.CENTER })
+            empty.addView(text("导入媒体，开始整理你的美好回忆", 13f, muted).apply { gravity = Gravity.CENTER })
+            c.addView(empty)
+        } else {
+            val grid = GridLayout(this).apply { columnCount = 3; useDefaultMargins = false }
+            visible.forEach { item ->
+                val tile = thumbnailTile(item)
+                val lp = GridLayout.LayoutParams().apply {
+                    width = 0; height = dp(132); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
+                    setMargins(dp(3), dp(3), dp(3), dp(3))
+                }
+                grid.addView(tile, lp)
+            }
+            c.addView(grid)
+        }
         page(c)
     }
 
