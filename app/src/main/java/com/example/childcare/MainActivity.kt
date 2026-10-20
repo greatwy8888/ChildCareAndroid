@@ -363,16 +363,44 @@ class MainActivity : ComponentActivity() {
         }
         frame.setOnClickListener { openItem(item) }
         frame.setOnLongClickListener {
-            AlertDialog.Builder(this).setTitle(item.name).setItems(arrayOf("查看", "删除")) { _, which ->
-                if (which == 0) openItem(item) else AlertDialog.Builder(this).setTitle("删除文件？")
-                    .setMessage("确定从雄哥相册中永久删除此文件吗？")
-                    .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
-                        file.delete(); saveItems(items().filterNot { it.id == item.id }); home()
-                    }.show()
+            AlertDialog.Builder(this).setTitle(item.name).setItems(arrayOf("查看", "重命名", "移动到文件夹", "删除")) { _, which ->
+                when (which) {
+                    0 -> openItem(item)
+                    1 -> renameItem(item)
+                    2 -> moveItem(item)
+                    3 -> AlertDialog.Builder(this).setTitle("删除文件？")
+                        .setMessage("确定从雄哥相册中永久删除此文件吗？此操作不会删除系统相册中的原图。")
+                        .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
+                            file.delete(); saveItems(items().filterNot { it.id == item.id }); home()
+                        }.show()
+                }
             }.show()
             true
         }
         return frame
+    }
+
+    private fun renameItem(item: Item) {
+        val input = field("文件名").apply { setText(item.name); selectAll() }
+        AlertDialog.Builder(this).setTitle("重命名文件").setView(input)
+            .setNegativeButton("取消", null).setPositiveButton("保存") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isBlank()) { toast("文件名不能为空"); return@setPositiveButton }
+                saveItems(items().map { if (it.id == item.id) it.copy(name = name) else it })
+                home()
+            }.show()
+    }
+
+    private fun moveItem(item: Item) {
+        val fm = folders()
+        val names = listOf("全部文件（根目录）") + fm.values.toList()
+        AlertDialog.Builder(this).setTitle("移动到文件夹").setItems(names.toTypedArray()) { _, which ->
+            val target = if (which == 0) "root" else fm.keys.elementAt(which - 1)
+            saveItems(items().map { if (it.id == item.id) it.copy(folder = target) else it })
+            folder = target
+            toast("文件已移动")
+            home()
+        }.setNegativeButton("取消", null).show()
     }
 
     private fun createFolder() {
