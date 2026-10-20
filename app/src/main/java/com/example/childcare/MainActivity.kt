@@ -1,449 +1,326 @@
 package com.example.childcare
 
-import android.Manifest
-import android.app.ActivityManager
 import android.app.AlertDialog
-import android.app.NotificationManager
-import android.app.admin.DevicePolicyManager
-import android.content.ComponentName
-import android.content.pm.PackageManager
 import android.content.Context
-import android.content.Intent
+import android.graphics.BitmapFactory
 import android.graphics.Color
+import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
-import android.os.Build
+import android.net.Uri
 import android.os.Bundle
-import android.text.InputFilter
+import android.provider.OpenableColumns
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
-import android.view.WindowManager
-import android.util.Log
-import android.widget.EditText
-import android.widget.LinearLayout
-import android.widget.TextView
-import android.widget.Toast
+import android.widget.*
 import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
-import androidx.core.view.setPadding
+import org.json.JSONArray
+import org.json.JSONObject
+import java.io.File
+import java.security.MessageDigest
+import java.util.UUID
 
 class MainActivity : ComponentActivity() {
-    private var locked = true
-    private val notificationPermissionLauncher =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) {
-            showGuard()
-            showPasswordPrompt()
-        }
+    private val prefs by lazy { getSharedPreferences("private_gallery", Context.MODE_PRIVATE) }
+    private var folder = "root"
+    private val blue = Color.rgb(55, 126, 245)
+    private val ink = Color.rgb(32, 44, 68)
+    private val muted = Color.rgb(112, 126, 149)
+    private val pale = Color.rgb(244, 247, 252)
+
+    private val importer = registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
+        var count = 0
+        uris?.forEach { if (importFile(it)) count++ }
+        toast("已独立保存 " + count + " 个文件")
+        home()
+    }
+    private val bgPicker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                File(filesDir, "login_bg").outputStream().use { output -> input.copyTo(output) }
+            }
+            toast("登录背景已更新")
+        } catch (_: Exception) { toast("图片保存失败") }
+        settings()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        if (Build.VERSION.SDK_INT >= 27) {
-            setShowWhenLocked(true)
-            setTurnScreenOn(true)
-        }
-
-        // A recreated activity must respect an existing, still-valid unlock window.
-        // Do not briefly show the guard or prompt for TOTP while authorization is active.
-        val deadline = prefs().getLong(KEY_DEADLINE, 0L)
-        if (deadline > System.currentTimeMillis()) {
-            locked = false
-            finish()
-            return
-        }
-
-        if (Build.VERSION.SDK_INT >= 33 &&
-            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        ) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-            return
-        }
-        showGuard()
-        showPasswordPrompt()
+        File(filesDir, "private_media").mkdirs()
+        if (prefs.getString("password_hash", null).isNullOrBlank()) setup() else login()
     }
 
-    override fun onNewIntent(intent: Intent) {
-        super.onNewIntent(intent)
-        setIntent(intent)
-
-        // Launcher and timer-notification intents must not end an authorized
-        // usage window early. The persisted deadline is the source of truth.
-        val deadline = prefs().getLong(KEY_DEADLINE, 0L)
-        if (deadline > System.currentTimeMillis()) {
-            locked = false
-            moveTaskToBack(true)
-            return
+    private fun dp(v: Int) = (v * resources.displayMetrics.density).toInt()
+    private fun toast(s: String) = Toast.makeText(this, s, Toast.LENGTH_SHORT).show()
+    private fun bg(color: Int, radius: Int = 16): GradientDrawable =
+        GradientDrawable().apply { setColor(color); cornerRadius = dp(radius).toFloat() }
+    private fun text(s: String, size: Float = 15f, color: Int = ink, bold: Boolean = false) =
+        TextView(this).apply {
+            text = s; textSize = size; setTextColor(color); gravity = Gravity.CENTER_VERTICAL
+            if (bold) setTypeface(typeface, android.graphics.Typeface.BOLD)
         }
-
-        showGuard()
-        showPasswordPrompt()
+    private fun btn(s: String, primary: Boolean = false, action: () -> Unit) =
+        TextView(this).apply {
+            text = s; textSize = 14f; gravity = Gravity.CENTER
+            setTextColor(if (primary) Color.WHITE else blue)
+            background = bg(if (primary) blue else Color.WHITE, 13)
+            setPadding(dp(13), dp(12), dp(13), dp(12))
+            setOnClickListener { action() }
+        }
+    private fun field(hintText: String, password: Boolean = false) = EditText(this).apply {
+        hint = hintText; setSingleLine(true); textSize = 15f
+        inputType = if (password) InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD else InputType.TYPE_CLASS_TEXT
+        background = bg(Color.WHITE, 12); setPadding(dp(14), dp(8), dp(14), dp(8))
+    }
+    private fun page(c: LinearLayout) {
+        val scroll = ScrollView(this)
+        scroll.addView(c)
+        setContentView(scroll)
+    }
+    private fun col() = LinearLayout(this).apply {
+        orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(22), dp(20), dp(24)); setBackgroundColor(pale)
+    }
+    private fun gap(c: LinearLayout, h: Int = 12) { c.addView(View(this), LinearLayout.LayoutParams(1, dp(h))) }
+    private fun addField(c: LinearLayout, f: EditText) {
+        c.addView(f, LinearLayout.LayoutParams(-1, dp(52)).apply { bottomMargin = dp(12) })
     }
 
-    override fun onResume() {
-        super.onResume()
-        val deadline = prefs().getLong(KEY_DEADLINE, 0L)
-        val now = System.currentTimeMillis()
-        Log.i(TAG, "onResume: deadlinePresent=" + (deadline > 0L) + ", expired=" + (deadline > 0L && deadline <= now) + ", locked=" + locked)
-        if (deadline > 0L && deadline <= System.currentTimeMillis()) {
-            // The service leaves the expired deadline in place because Android may
-            // silently block a background activity launch without throwing.
-            // Consume the deadline here, when the lock activity is actually resumed.
-            if (!locked) {
-                locked = true
-                showGuard()
-                showPasswordPrompt()
-            }
-            prefs().edit().remove(KEY_DEADLINE).apply()
-            // The guard has resumed, so the fallback notification is no longer needed.
-            getSystemService(NotificationManager::class.java)
-                .cancel(UnlockTimerService.EXPIRED_NOTIFICATION_ID)
-        }
-        if (locked) {
-            applyImmersive()
-            enforceKioskIfManaged()
-        }
+    private fun setup() {
+        val c = col()
+        c.addView(text("✦  私密相册", 30f, blue, true)); gap(c, 8)
+        c.addView(text("创建密码，保护照片和视频", 14f, muted)); gap(c, 28)
+        val user = field("用户名（默认 admin）").apply { setText("admin") }
+        val p = field("设置密码（至少 6 位）", true)
+        val again = field("再次输入密码", true)
+        addField(c, user); addField(c, p); addField(c, again)
+        c.addView(btn("创建并进入相册", true) {
+            if (p.text.length < 6) { p.error = "密码至少 6 位"; return@btn }
+            if (p.text.toString() != again.text.toString()) { again.error = "两次密码不一致"; return@btn }
+            prefs.edit().putString("username", user.text.toString().trim().ifBlank { "admin" })
+                .putString("password_hash", hash(p.text.toString())).apply()
+            home()
+        })
+        gap(c, 18)
+        c.addView(text("文件保存在本机应用私有空间，不会自动上传云端。", 12f, muted))
+        page(c)
     }
 
-    @Deprecated("Keep the guard visible while locked")
-    override fun onBackPressed() {
-        if (locked) Toast.makeText(this, "请输入密码", Toast.LENGTH_SHORT).show()
-        else super.onBackPressed()
-    }
-
-    private fun prefs() = getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-
-    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
-
-    private fun roundedBackground(color: Int, radiusDp: Int, strokeColor: Int? = null): GradientDrawable =
-        GradientDrawable().apply {
-            setColor(color)
-            cornerRadius = dp(radiusDp).toFloat()
-            if (strokeColor != null) setStroke(dp(1), strokeColor)
-        }
-
-    private fun showGuard() {
-        locked = true
-        applyImmersive()
-        enforceKioskIfManaged()
-        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        if (dpm.isDeviceOwnerApp(packageName)) {
-            try {
-                // Only Device Owner can enforce this. A regular APK cannot block system uninstall.
-                dpm.setUninstallBlocked(admin(), packageName, true)
-            } catch (_: Exception) { }
-        }
-
-        val pageBackground = Color.rgb(10, 17, 35)
-        val cardBackground = Color.rgb(22, 34, 61)
-        val accent = Color.rgb(130, 190, 255)
-        val muted = Color.rgb(190, 205, 230)
-        val root = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER
-            setPadding(dp(26))
-            setBackgroundColor(pageBackground)
-        }
-
+    private fun login() {
+        val c = col()
+        val bitmap = BitmapFactory.decodeFile(File(filesDir, "login_bg").absolutePath)
+        if (bitmap != null) c.background = BitmapDrawable(resources, bitmap)
+        c.gravity = Gravity.CENTER_VERTICAL
         val card = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(24))
-            background = roundedBackground(cardBackground, 28, Color.rgb(48, 67, 103))
+            orientation = LinearLayout.VERTICAL; setPadding(dp(22), dp(26), dp(22), dp(26)); background = bg(Color.WHITE, 24)
         }
-        val iconCircle = TextView(this).apply {
-            text = "✦"
-            textSize = 38f
-            gravity = Gravity.CENTER
-            setTextColor(accent)
-            background = roundedBackground(Color.rgb(32, 51, 85), 40)
+        card.addView(text("◉  私密相册", 29f, blue, true)); gap(card, 8)
+        card.addView(text("珍藏每一份美好回忆", 14f, muted)); gap(card, 24)
+        val user = field("用户名").apply { setText(prefs.getString("username", "admin")) }
+        val p = field("登录密码", true)
+        addField(card, user); addField(card, p)
+        card.addView(btn("登录", true) {
+            if (user.text.toString().trim() == prefs.getString("username", "admin") &&
+                hash(p.text.toString()) == prefs.getString("password_hash", "")) home()
+            else p.error = "用户名或密码不正确"
+        })
+        gap(card, 12)
+        card.addView(btn("自定义登录背景图片") { bgPicker.launch(arrayOf("image/*")) })
+        c.addView(card, LinearLayout.LayoutParams(-1, -2))
+        page(c)
+    }
+
+    private data class Item(val id: String, val name: String, val path: String, val mime: String, val folder: String, val time: Long) {
+        fun json() = JSONObject().put("id", id).put("name", name).put("path", path).put("mime", mime).put("folder", folder).put("time", time)
+    }
+    private fun items(): List<Item> = try {
+        val a = JSONArray(prefs.getString("items", "[]"))
+        (0 until a.length()).map { i ->
+            val o = a.getJSONObject(i)
+            Item(o.getString("id"), o.getString("name"), o.getString("path"), o.getString("mime"), o.optString("folder", "root"), o.optLong("time"))
+        }.filter { File(filesDir, it.path).exists() }
+    } catch (_: Exception) { emptyList() }
+    private fun saveItems(list: List<Item>) {
+        val a = JSONArray(); list.forEach { a.put(it.json()) }
+        prefs.edit().putString("items", a.toString()).apply()
+    }
+    private fun folders(): LinkedHashMap<String, String> {
+        val map = linkedMapOf<String, String>()
+        try {
+            val o = JSONObject(prefs.getString("folders", "{}")); val keys = o.keys()
+            while (keys.hasNext()) { val k = keys.next(); map[k] = o.getString(k) }
+        } catch (_: Exception) { }
+        return map
+    }
+    private fun saveFolders(map: Map<String, String>) {
+        val o = JSONObject(); map.forEach { (k, v) -> o.put(k, v) }
+        prefs.edit().putString("folders", o.toString()).apply()
+    }
+
+    private fun home() {
+        val list = items()
+        val fm = folders()
+        val c = col()
+        val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        header.addView(text(if (folder == "root") "我的相册" else fm[folder] ?: "文件夹", 25f, ink, true), LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(btn("⚙ 设置") { settings() })
+        c.addView(header); gap(c, 8)
+        c.addView(text("本地私密存储 · " + list.count { it.mime.startsWith("image/") } + " 张照片 · " +
+            list.count { it.mime.startsWith("video/") } + " 个视频", 13f, muted)); gap(c, 16)
+        val actions = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        actions.addView(btn("＋ 新建文件夹") { createFolder() }, LinearLayout.LayoutParams(0, -2, 1f))
+        actions.addView(View(this), LinearLayout.LayoutParams(dp(8), 1))
+        actions.addView(btn("⇧ 导入照片/视频", true) { importer.launch(arrayOf("image/*", "video/*")) }, LinearLayout.LayoutParams(0, -2, 1.3f))
+        c.addView(actions); gap(c, 18)
+        c.addView(text("文件夹（长按可管理）", 18f, ink, true)); gap(c, 8)
+        c.addView(folderRow("全部照片与视频", "root", list.size))
+        fm.forEach { (id, name) -> c.addView(folderRow(name, id, list.count { it.folder == id })) }
+        gap(c, 18)
+        c.addView(text(if (folder == "root") "最近添加" else "文件列表", 18f, ink, true)); gap(c, 8)
+        val visible = if (folder == "root") list.sortedByDescending { it.time } else list.filter { it.folder == folder }.sortedByDescending { it.time }
+        if (visible.isEmpty()) {
+            c.addView(text("▧", 34f, blue, true)); c.addView(text("这里还没有文件", 16f, ink, true))
+            c.addView(text("点击上方按钮导入照片或视频", 13f, muted))
+        } else visible.forEach { c.addView(itemRow(it)) }
+        page(c)
+    }
+
+    private fun folderRow(name: String, id: String, count: Int): View {
+        val row = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(10), dp(10)); background = bg(Color.WHITE)
         }
-        card.addView(iconCircle, LinearLayout.LayoutParams(dp(82), dp(82)).apply {
-            bottomMargin = dp(24)
-        })
+        row.addView(text("▣", 25f, blue, true), LinearLayout.LayoutParams(dp(42), dp(44)))
+        val detail = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(10), 0, 0, 0) }
+        detail.addView(text(name, 15f, ink, true)); detail.addView(text(count.toString() + " 个文件", 12f, muted))
+        row.addView(detail, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(btn("打开") { folder = id; home() })
+        row.setOnClickListener { folder = id; home() }
+        row.setOnLongClickListener { if (id != "root") folderMenu(id, name) else Toast.makeText(this, "这是全部文件视图", Toast.LENGTH_SHORT).show(); true }
+        return LinearLayout(this).apply { setPadding(0, 0, 0, dp(8)); addView(row) }
+    }
 
-        card.addView(TextView(this).apply {
-            text = "友情提示："
-            textSize = 16f
-            gravity = Gravity.CENTER
-            setTextColor(accent)
-            setPadding(0, 0, 0, dp(10))
-        }, LinearLayout.LayoutParams(-1, -2))
+    private fun itemRow(item: Item): View {
+        val row = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(8), dp(10)); background = bg(Color.WHITE)
+        }
+        row.addView(text(if (item.mime.startsWith("video/")) "▶" else "▧", 24f, blue, true), LinearLayout.LayoutParams(dp(42), dp(46)))
+        val detail = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(8), 0, dp(4), 0) }
+        detail.addView(text(item.name, 13f, ink, true))
+        detail.addView(text(if (item.mime.startsWith("video/")) "视频 · 点击播放" else "照片 · 点击查看", 12f, muted))
+        row.addView(detail, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(btn("删除") { AlertDialog.Builder(this).setTitle("删除文件？")
+            .setMessage("确定从私密相册中永久删除“" + item.name + "”吗？")
+            .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
+                File(filesDir, item.path).delete(); saveItems(items().filterNot { it.id == item.id }); home()
+            }.show() })
+        row.setOnClickListener { openItem(item) }
+        return LinearLayout(this).apply { setPadding(0, 0, 0, dp(8)); addView(row) }
+    }
 
-        card.addView(TextView(this).apply {
-            text = "王梓淇请休息一会"
-            textSize = 27f
-            gravity = Gravity.CENTER
-            setTextColor(Color.WHITE)
-            setPadding(0, 0, 0, dp(14))
-        }, LinearLayout.LayoutParams(-1, -2))
+    private fun createFolder() {
+        val input = field("文件夹名称")
+        AlertDialog.Builder(this).setTitle("新建文件夹").setView(input).setNegativeButton("取消", null)
+            .setPositiveButton("创建") { _, _ ->
+                val name = input.text.toString().trim()
+                if (name.isBlank()) { toast("请输入名称"); return@setPositiveButton }
+                val map = folders()
+                if (map.values.any { it.equals(name, true) }) { toast("名称已存在"); return@setPositiveButton }
+                map[UUID.randomUUID().toString()] = name; saveFolders(map); home()
+            }.show()
+    }
 
-        card.addView(View(this).apply {
-            setBackgroundColor(Color.rgb(58, 78, 115))
-        }, LinearLayout.LayoutParams(dp(56), dp(2)).apply {
-            bottomMargin = dp(18)
-        })
+    private fun folderMenu(id: String, name: String) {
+        AlertDialog.Builder(this).setTitle(name).setItems(arrayOf("打开", "重命名", "删除文件夹")) { _, which ->
+            when (which) {
+                0 -> { folder = id; home() }
+                1 -> {
+                    val input = field("文件夹名称").apply { setText(name); selectAll() }
+                    AlertDialog.Builder(this).setTitle("重命名").setView(input).setNegativeButton("取消", null)
+                        .setPositiveButton("保存") { _, _ ->
+                            val n = input.text.toString().trim()
+                            if (n.isNotBlank()) { val map = folders(); map[id] = n; saveFolders(map); home() }
+                        }.show()
+                }
+                2 -> {
+                    val check = CheckBox(this).apply { text = "同时永久删除其中的所有文件" }
+                    AlertDialog.Builder(this).setTitle("删除文件夹？").setMessage("确定删除“" + name + "”？不勾选则保留文件并移到全部文件。")
+                        .setView(check).setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
+                            val all = items()
+                            if (check.isChecked) {
+                                all.filter { it.folder == id }.forEach { File(filesDir, it.path).delete() }
+                                saveItems(all.filterNot { it.folder == id })
+                            } else saveItems(all.map { if (it.folder == id) it.copy(folder = "root") else it })
+                            val map = folders(); map.remove(id); saveFolders(map)
+                            if (folder == id) folder = "root"
+                            home()
+                        }.show()
+                }
+            }
+        }.show()
+    }
 
-        card.addView(TextView(this).apply {
-            text = "请放下手机，休息一下眼睛"
-            textSize = 16f
-            gravity = Gravity.CENTER
-            setTextColor(muted)
-            setPadding(0, 0, 0, dp(8))
-        }, LinearLayout.LayoutParams(-1, -2))
+    private fun settings() {
+        val c = col()
+        c.addView(text("设置", 26f, ink, true)); gap(c, 18)
+        c.addView(btn("修改登录密码") { changePassword() }); gap(c)
+        c.addView(btn("更换登录背景图片") { bgPicker.launch(arrayOf("image/*")) }); gap(c)
+        c.addView(btn("返回相册", true) { home() }); gap(c, 24)
+        c.addView(text("隐私说明", 17f, ink, true)); gap(c, 8)
+        c.addView(text("导入的照片和视频会复制到 App 私有目录，与系统相册独立保存。从系统相册删除原图不会删除这里的副本。卸载 App 或清除 App 数据会删除本地文件，请提前备份。", 14f, muted))
+        gap(c, 18); c.addView(btn("退出登录") { login() })
+        page(c)
+    }
 
-        card.addView(TextView(this).apply {
-            text = "输入密码继续使用"
-            textSize = 14f
-            gravity = Gravity.CENTER
-            setTextColor(Color.rgb(143, 160, 191))
-        }, LinearLayout.LayoutParams(-1, -2))
+    private fun changePassword() {
+        val c = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(8), dp(18), 0) }
+        val old = field("当前密码", true); val next = field("新密码（至少 6 位）", true); val again = field("确认新密码", true)
+        addField(c, old); addField(c, next); addField(c, again)
+        val dialog = AlertDialog.Builder(this).setTitle("修改登录密码").setView(c).setNegativeButton("取消", null).setPositiveButton("保存", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (hash(old.text.toString()) != prefs.getString("password_hash", "")) { old.error = "当前密码不正确"; return@setOnClickListener }
+                if (next.text.length < 6) { next.error = "密码至少 6 位"; return@setOnClickListener }
+                if (next.text.toString() != again.text.toString()) { again.error = "两次密码不一致"; return@setOnClickListener }
+                prefs.edit().putString("password_hash", hash(next.text.toString())).apply()
+                dialog.dismiss(); toast("密码已修改"); settings()
+            }
+        }
+        dialog.show()
+    }
 
-        root.addView(card, LinearLayout.LayoutParams(-1, -2).apply {
-            gravity = Gravity.CENTER
-        })
-        root.addView(TextView(this).apply {
-            text = "健康使用手机 · 保护视力"
-            textSize = 12f
-            gravity = Gravity.CENTER
-            setTextColor(Color.rgb(104, 124, 158))
-            setPadding(0, dp(22), 0, 0)
-        }, LinearLayout.LayoutParams(-1, -2))
+    private fun importFile(uri: Uri): Boolean = try {
+        val mime = contentResolver.getType(uri) ?: return false
+        if (!mime.startsWith("image/") && !mime.startsWith("video/")) return false
+        var name = "媒体文件"
+        contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
+            if (it.moveToFirst()) name = it.getString(0) ?: name
+        }
+        val ext = name.substringAfterLast('.', "").takeIf { it.length in 1..8 }?.let { "." + it } ?: ""
+        val id = UUID.randomUUID().toString()
+        val rel = "private_media/" + id + ext
+        contentResolver.openInputStream(uri)?.use { input -> File(filesDir, rel).outputStream().use { output -> input.copyTo(output) } } ?: return false
+        saveItems(items() + Item(id, name, rel, mime, folder, System.currentTimeMillis()))
+        true
+    } catch (_: Exception) { false }
+
+    private fun openItem(item: Item) {
+        val file = File(filesDir, item.path)
+        if (!file.exists()) { toast("文件不存在"); return }
+        val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.BLACK) }
+        root.addView(btn("‹ 返回", false) { home() })
+        if (item.mime.startsWith("video/")) {
+            val v = VideoView(this)
+            v.setVideoURI(Uri.fromFile(file)); v.setMediaController(MediaController(this))
+            root.addView(v, LinearLayout.LayoutParams(-1, 0, 1f)); v.setOnPreparedListener { v.start() }
+        } else {
+            val image = ImageView(this).apply {
+                setImageBitmap(BitmapFactory.decodeFile(file.absolutePath)); scaleType = ImageView.ScaleType.FIT_CENTER
+            }
+            root.addView(image, LinearLayout.LayoutParams(-1, 0, 1f))
+        }
         setContentView(root)
     }
 
-    private fun enforceKioskIfManaged() {
-        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        if (!dpm.isDeviceOwnerApp(packageName)) return
-        try {
-            dpm.setLockTaskPackages(admin(), arrayOf(packageName))
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                // Disable Home/Overview and other system UI features while kiosk lock task is active.
-                dpm.setLockTaskFeatures(admin(), DevicePolicyManager.LOCK_TASK_FEATURE_NONE)
-            }
-            dpm.setStatusBarDisabled(admin(), true)
-            val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
-            if (dpm.isLockTaskPermitted(packageName) &&
-                activityManager.lockTaskModeState == ActivityManager.LOCK_TASK_MODE_NONE) {
-                startLockTask()
-            }
-        } catch (_: Exception) {
-            // Keep the guard UI available even if a device policy operation is rejected.
-        }
-    }
-
-    private fun applyImmersive() {
-        window.decorView.systemUiVisibility = (
-            View.SYSTEM_UI_FLAG_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or
-                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
-                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or
-                View.SYSTEM_UI_FLAG_LAYOUT_STABLE
-            )
-    }
-
-    
-private fun showSettingsDialog(onClosed: (() -> Unit)? = null) {
-    val current = prefs().getInt(
-        KEY_DURATION_MINUTES,
-        DEFAULT_DURATION_MINUTES
-    ).coerceIn(MIN_DURATION_MINUTES, MAX_DURATION_MINUTES)
-
-    val input = EditText(this).apply {
-        inputType = InputType.TYPE_CLASS_NUMBER
-        setSingleLine(true)
-        setText(current.toString())
-        hint = "5 至 180 分钟"
-    }
-
-    val container = LinearLayout(this).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(dp(24), dp(8), dp(24), dp(8))
-
-        addView(input)
-
-        addView(TextView(this@MainActivity).apply {
-            text = "设置解锁时长，范围 5–180 分钟，默认 40 分钟。"
-            textSize = 13f
-            setTextColor(Color.GRAY)
-            setPadding(0, dp(12), 0, 0)
-        })
-    }
-
-    val dialog = AlertDialog.Builder(this)
-        .setTitle("⚙ 解锁时长设置")
-        .setView(container)
-        .setNegativeButton("取消", null)
-        .setPositiveButton("保存", null)
-        .create()
-
-    dialog.setOnShowListener {
-        dialog.getButton(AlertDialog.BUTTON_POSITIVE)
-            .setOnClickListener {
-                val minutes = input.text.toString().toIntOrNull()
-
-                if (minutes == null ||
-                    minutes !in MIN_DURATION_MINUTES..MAX_DURATION_MINUTES
-                ) {
-                    input.error = "请输入 5 至 180 之间的分钟数"
-                    return@setOnClickListener
-                }
-
-                prefs().edit()
-                    .putInt(KEY_DURATION_MINUTES, minutes)
-                    .apply()
-
-                Toast.makeText(
-                    this,
-                    "已保存：$minutes 分钟",
-                    Toast.LENGTH_SHORT
-                ).show()
-
-                dialog.dismiss()
-            }
-    }
-
-    dialog.setOnDismissListener {
-        onClosed?.invoke()
-    }
-
-    dialog.show()
-}
-
-    private fun showPasswordPrompt() {
-        val input = EditText(this).apply {
-            hint = "输入密码"
-            inputType = InputType.TYPE_CLASS_NUMBER
-            setSingleLine(true)
-            filters = arrayOf(InputFilter.LengthFilter(6))
-        }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("王梓淇请休息一会")
-            .setMessage(
-    "验证通过后可使用手机 ${
-        prefs().getInt(KEY_DURATION_MINUTES, DEFAULT_DURATION_MINUTES)
-            .coerceIn(MIN_DURATION_MINUTES, MAX_DURATION_MINUTES)
-    } 分钟。"
-)
-            .setView(input)
-            .setCancelable(false)
-            .setNeutralButton("⚙ 设置", null)
-            .setPositiveButton("解锁", null)
-            .create()
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
-                showSettingsPasswordPrompt {
-                    dialog.dismiss()
-                    showSettingsDialog {
-                        if (locked) showPasswordPrompt()
-                    }
-                }
-            }
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val entered = input.text.toString()
-                if (entered.length != 6 || !entered.all { it in '0'..'9' } || !verifyTotp(entered)) {
-                    input.error = "动态密码错误或已过期"
-                    return@setOnClickListener
-                }
-                dialog.dismiss()
-                unlockForDuration()
-            }
-        }
-        dialog.show()
-    }
-
-    /**
-     * Settings are protected by the same TOTP check as unlocking.
-     * The existing lock screen remains visible until verification succeeds.
-     */
-    private fun showSettingsPasswordPrompt(onVerified: () -> Unit) {
-        val input = EditText(this).apply {
-            hint = "输入 6 位动态密码"
-            inputType = InputType.TYPE_CLASS_NUMBER
-            setSingleLine(true)
-            filters = arrayOf(InputFilter.LengthFilter(6))
-        }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("家长验证")
-            .setMessage("进入设置前，请输入 Google Authenticator 动态密码。")
-            .setView(input)
-            .setNegativeButton("取消", null)
-            .setPositiveButton("验证", null)
-            .create()
-
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val entered = input.text.toString()
-                if (entered.length != 6 ||
-                    !entered.all { it in '0'..'9' } ||
-                    !verifyTotp(entered)
-                ) {
-                    input.error = "动态密码错误或已过期"
-                    return@setOnClickListener
-                }
-                dialog.dismiss()
-                onVerified()
-            }
-        }
-        dialog.show()
-    }
-
-    private fun verifyTotp(code: String): Boolean {
-        val secret = "3XJSD7D2YTLONRMPETS6NG5VP4M6JPXU"
-        return Totp.verifyBase32(secret, code, System.currentTimeMillis() / 1000L)
-    }
-
-    private fun unlockForDuration() {
-        val durationMinutes = prefs().getInt(
-            KEY_DURATION_MINUTES,
-            DEFAULT_DURATION_MINUTES
-        ).coerceIn(MIN_DURATION_MINUTES, MAX_DURATION_MINUTES)
-        val deadline = System.currentTimeMillis() + durationMinutes * 60_000L
-
-        // Start the timer before releasing kiosk restrictions. If starting the
-        // service throws, keep the guard active instead of leaving an untimed unlock.
-        prefs().edit().putLong(KEY_DEADLINE, deadline).apply()
-        try {
-            ContextCompat.startForegroundService(
-                this,
-                Intent(this, UnlockTimerService::class.java)
-                    .putExtra(UnlockTimerService.EXTRA_DEADLINE, deadline)
-            )
-        } catch (_: Exception) {
-            prefs().edit().remove(KEY_DEADLINE).apply()
-            locked = true
-            showGuard()
-            applyImmersive()
-            enforceKioskIfManaged()
-            Toast.makeText(this, "计时服务启动失败，手机保持锁定状态", Toast.LENGTH_LONG).show()
-            return
-        }
-
-        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        if (dpm.isDeviceOwnerApp(packageName)) {
-            try {
-                dpm.setStatusBarDisabled(admin(), false)
-                if ((getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).lockTaskModeState != ActivityManager.LOCK_TASK_MODE_NONE) {
-                    stopLockTask()
-                }
-            } catch (_: Exception) { }
-        }
-        locked = false
-        Toast.makeText(this, "已解锁 $durationMinutes 分钟", Toast.LENGTH_SHORT).show()
-        moveTaskToBack(true)
-    }
-
-    private fun admin() = ComponentName(this, AdminReceiver::class.java)
-
-companion object {
-    private const val TAG = "MinimalGuardActivity"
-    const val PREFS = "minimal_guard"
-    const val KEY_DEADLINE = "unlock_deadline"
-
-    const val KEY_DURATION_MINUTES = "unlock_duration_minutes"
-    const val DEFAULT_DURATION_MINUTES = 40
-    const val MIN_DURATION_MINUTES = 5
-    const val MAX_DURATION_MINUTES = 180
-}
+    private fun hash(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray(Charsets.UTF_8))
+        .joinToString("") { "%02x".format(it) }
 }
