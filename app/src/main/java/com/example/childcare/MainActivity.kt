@@ -174,48 +174,152 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun home() {
-        val list = items()
+        val all = items().sortedByDescending { it.time }
         val fm = folders()
         val c = col()
+        c.setPadding(dp(18), dp(18), dp(18), dp(18))
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        header.addView(text(if (folder == "root") "我的相册" else fm[folder] ?: "文件夹", 25f, ink, true), LinearLayout.LayoutParams(0, -2, 1f))
-        header.addView(btn("⚙ 设置") { settings() })
-        c.addView(header); gap(c, 8)
-        c.addView(text("本地私密存储 · " + list.count { it.mime.startsWith("image/") } + " 张照片 · " +
-            list.count { it.mime.startsWith("video/") } + " 个视频", 13f, muted)); gap(c, 16)
-        val actions = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        actions.addView(btn("＋ 新建文件夹") { createFolder() }, LinearLayout.LayoutParams(0, -2, 1f))
-        actions.addView(View(this), LinearLayout.LayoutParams(dp(8), 1))
-        actions.addView(btn("⇧ 导入照片/视频", true) { importer.launch(arrayOf("image/*", "video/*")) }, LinearLayout.LayoutParams(0, -2, 1.3f))
-        c.addView(actions); gap(c, 18)
-        c.addView(text("文件夹（长按可管理）", 18f, ink, true)); gap(c, 8)
-        c.addView(folderRow("全部照片与视频", "root", list.size))
-        fm.forEach { (id, name) -> c.addView(folderRow(name, id, list.count { it.folder == id })) }
-        gap(c, 18)
-        c.addView(text(if (folder == "root") "最近添加" else "文件列表", 18f, ink, true)); gap(c, 8)
-        val visible = if (folder == "root") list.sortedByDescending { it.time } else list.filter { it.folder == folder }.sortedByDescending { it.time }
-        if (visible.isEmpty()) {
-            val empty = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(16), dp(44), dp(16), dp(44))
-                background = bg(Color.WHITE, 22)
+        val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        titles.addView(text("雄哥相册", 26f, ink, true))
+        titles.addView(text("珍藏美好 · 私密相册", 12f, muted))
+        header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(btn("⌕ 搜索") { searchItems() })
+        header.addView(btn("＋") { showAddMenu() }, LinearLayout.LayoutParams(dp(54), dp(48)).apply { leftMargin = dp(8) })
+        c.addView(header); gap(c, 18)
+        val cover = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(18), dp(18), dp(18))
+            background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(38,133,239), Color.rgb(93,91,238))).apply { cornerRadius = dp(22).toFloat() }
+            elevation = dp(3).toFloat()
+        }
+        cover.addView(text("我的相册", 19f, Color.WHITE, true)); gap(cover, 5)
+        cover.addView(text("照片与视频都安全保存在本机", 12f, 0xFFEAF2FF.toInt())); gap(cover, 16)
+        val summary = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val photos = all.count { it.mime.startsWith("image/") }
+        val videos = all.count { it.mime.startsWith("video/") }
+        summary.addView(summaryCell("▧", photos.toString(), "张照片"), LinearLayout.LayoutParams(0, -2, 1f))
+        summary.addView(summaryCell("▶", videos.toString(), "个视频"), LinearLayout.LayoutParams(0, -2, 1f))
+        summary.addView(summaryCell("▣", fm.size.toString(), "个文件夹"), LinearLayout.LayoutParams(0, -2, 1f))
+        cover.addView(summary); cover.setOnClickListener { folder = "root"; home() }
+        c.addView(cover); gap(c, 22)
+        val folderHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        folderHeader.addView(text("我的文件夹", 18f, ink, true), LinearLayout.LayoutParams(0, -2, 1f))
+        folderHeader.addView(btn("＋ 新建") { createFolder() })
+        c.addView(folderHeader); gap(c, 10)
+        if (fm.isEmpty()) {
+            val emptyFolder = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(14), dp(16), dp(14), dp(16)); background = bg(Color.WHITE, 18) }
+            emptyFolder.addView(text("📁", 27f), LinearLayout.LayoutParams(dp(48), dp(46)))
+            val et = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            et.addView(text("创建你的第一个文件夹", 14f, ink, true))
+            et.addView(text("按旅行、家人、宠物等分类整理", 12f, muted))
+            emptyFolder.addView(et, LinearLayout.LayoutParams(0, -2, 1f))
+            emptyFolder.setOnClickListener { createFolder() }; c.addView(emptyFolder)
+        } else {
+            val fg = GridLayout(this).apply { columnCount = 2 }
+            fm.entries.forEachIndexed { index, entry ->
+                val count = all.count { it.folder == entry.key }
+                val card = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL; setPadding(dp(13), dp(13), dp(13), dp(13))
+                    background = bg(if (index % 3 == 0) 0xFFE8F3FF.toInt() else if (index % 3 == 1) 0xFFF0ECFF.toInt() else 0xFFFFF1E5.toInt(), 18)
+                    setOnClickListener { folder = entry.key; home() }
+                    setOnLongClickListener { folderMenu(entry.key, entry.value); true }
+                }
+                card.addView(text(if (index % 3 == 0) "🏞" else if (index % 3 == 1) "📷" else "📁", 26f)); gap(card, 8)
+                card.addView(text(entry.value, 14f, ink, true)); card.addView(text(count.toString() + " 个文件", 12f, muted))
+                val lp = GridLayout.LayoutParams().apply { width = 0; height = dp(116); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(dp(3), dp(3), dp(3), dp(3)) }
+                fg.addView(card, lp)
             }
-            empty.addView(text("▧", 48f, blue, true).apply { gravity = Gravity.CENTER })
-            empty.addView(text("还没有照片或视频", 17f, ink, true).apply { gravity = Gravity.CENTER })
-            empty.addView(text("导入媒体，开始整理你的美好回忆", 13f, muted).apply { gravity = Gravity.CENTER })
+            c.addView(fg)
+        }
+        gap(c, 20)
+        val fileHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        fileHeader.addView(text(if (folder == "root") "最近添加" else (fm[folder] ?: "文件列表"), 18f, ink, true), LinearLayout.LayoutParams(0, -2, 1f))
+        fileHeader.addView(btn("查看全部") { folder = "root"; home() })
+        c.addView(fileHeader); gap(c, 10)
+        val visible = if (folder == "root") all else all.filter { it.folder == folder }
+        if (visible.isEmpty()) {
+            val empty = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(16), dp(30), dp(16), dp(30)); background = bg(Color.WHITE, 20) }
+            empty.addView(text("▧", 42f, blue, true).apply { gravity = Gravity.CENTER }); gap(empty, 8)
+            empty.addView(text("还没有媒体文件", 16f, ink, true).apply { gravity = Gravity.CENTER })
+            empty.addView(text("点击右上角 + 导入照片或视频", 12f, muted).apply { gravity = Gravity.CENTER })
             c.addView(empty)
         } else {
             val grid = GridLayout(this).apply { columnCount = 3; useDefaultMargins = false }
-            visible.forEach { item ->
-                val tile = thumbnailTile(item)
-                val lp = GridLayout.LayoutParams().apply {
-                    width = 0; height = dp(132); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f)
-                    setMargins(dp(3), dp(3), dp(3), dp(3))
-                }
-                grid.addView(tile, lp)
+            visible.take(60).forEach { item ->
+                val lp = GridLayout.LayoutParams().apply { width = 0; height = dp(126); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(dp(3), dp(3), dp(3), dp(3)) }
+                grid.addView(thumbnailTile(item), lp)
+            }
+            c.addView(grid)
+            if (visible.size > 60) { gap(c, 8); c.addView(text("显示最近 60 个文件，共 " + visible.size + " 个", 12f, muted)) }
+        }
+        gap(c, 18)
+        val nav = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; background = bg(Color.WHITE, 18); setPadding(dp(6), dp(7), dp(6), dp(7)) }
+        nav.addView(navItem("▦", "相册", true) { folder = "root"; home() }, LinearLayout.LayoutParams(0, dp(54), 1f))
+        nav.addView(navItem("▣", "文件夹", false) { createFolder() }, LinearLayout.LayoutParams(0, dp(54), 1f))
+        nav.addView(navItem("◉", "发现", false) { showDiscovery() }, LinearLayout.LayoutParams(0, dp(54), 1f))
+        nav.addView(navItem("●", "我的", false) { settings() }, LinearLayout.LayoutParams(0, dp(54), 1f))
+        c.addView(nav); page(c)
+    }
+
+    private fun summaryCell(symbol: String, number: String, label: String): View {
+        val box = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        box.addView(text(symbol + "  " + number, 19f, Color.WHITE, true)); box.addView(text(label, 11f, 0xFFEAF2FF.toInt()))
+        return box
+    }
+
+    private fun navItem(symbol: String, label: String, selected: Boolean, action: () -> Unit): View =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
+            background = if (selected) bg(0xFFEAF2FF.toInt(), 12) else ColorDrawable(Color.TRANSPARENT)
+            addView(text(symbol, 19f, if (selected) blue else muted, true).apply { gravity = Gravity.CENTER })
+            addView(text(label, 11f, if (selected) blue else muted, selected).apply { gravity = Gravity.CENTER })
+            setOnClickListener { action() }
+        }
+
+    private fun showAddMenu() {
+        AlertDialog.Builder(this).setTitle("添加内容").setItems(arrayOf("导入照片 / 视频", "新建文件夹")) { _, which ->
+            if (which == 0) importer.launch(arrayOf("image/*", "video/*")) else createFolder()
+        }.show()
+    }
+
+    private fun searchItems() {
+        val input = field("输入文件名关键词")
+        AlertDialog.Builder(this).setTitle("搜索相册").setView(input).setNegativeButton("取消", null)
+            .setPositiveButton("搜索") { _, _ ->
+                val q = input.text.toString().trim()
+                showSearchResults(q, items().filter { it.name.contains(q, true) })
+            }.show()
+    }
+
+    private fun showSearchResults(query: String, found: List<Item>) {
+        val c = col()
+        c.addView(text("搜索结果", 24f, ink, true)); gap(c, 5)
+        c.addView(text("“" + query + "” · " + found.size + " 个结果", 13f, muted)); gap(c, 12)
+        if (found.isEmpty()) c.addView(text("没有找到匹配的文件", 14f, muted))
+        else {
+            val grid = GridLayout(this).apply { columnCount = 3 }
+            found.forEach { item ->
+                val lp = GridLayout.LayoutParams().apply { width = 0; height = dp(126); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(dp(3), dp(3), dp(3), dp(3)) }
+                grid.addView(thumbnailTile(item), lp)
             }
             c.addView(grid)
         }
-        page(c)
+        c.addView(btn("返回相册", true) { home() }); page(c)
+    }
+
+    private fun showDiscovery() {
+        val c = col()
+        c.addView(text("发现", 25f, ink, true)); gap(c, 8)
+        c.addView(text("让回忆更有条理", 15f, muted)); gap(c, 18)
+        listOf(Triple("📷", "照片与视频", "所有导入内容均保存在应用私有空间"),
+            Triple("📁", "自定义文件夹", "按旅行、家人、宠物等主题整理"),
+            Triple("🔒", "隐私保护", "登录密码保护，不会自动上传云端")).forEach { (icon, title, desc) ->
+            val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; background = bg(Color.WHITE, 16); setPadding(dp(14), dp(14), dp(14), dp(14)) }
+            row.addView(text(icon, 26f), LinearLayout.LayoutParams(dp(48), dp(48)))
+            val details = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            details.addView(text(title, 15f, ink, true)); details.addView(text(desc, 12f, muted))
+            row.addView(details); c.addView(row); gap(c, 10)
+        }
+        c.addView(btn("返回相册", true) { home() }); page(c)
     }
 
     private fun folderRow(name: String, id: String, count: Int): View {
