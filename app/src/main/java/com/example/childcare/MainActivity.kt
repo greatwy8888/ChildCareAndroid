@@ -5,7 +5,9 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
-import android.graphics.drawable.GradientDrawable\nimport android.graphics.drawable.ColorDrawable\nimport android.widget.GridLayout
+import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.ColorDrawable
+import android.widget.GridLayout
 import android.net.Uri
 import android.os.Bundle
 import android.provider.OpenableColumns
@@ -23,7 +25,8 @@ import java.util.UUID
 
 class MainActivity : ComponentActivity() {
     private val prefs by lazy { getSharedPreferences("private_gallery", Context.MODE_PRIVATE) }
-    private var folder = "root"\n    private var viewingFullscreenImage = false
+    private var folder = "root"
+    private var viewingFullscreenImage = false
     private val blue = Color.rgb(55, 126, 245)
     private val ink = Color.rgb(32, 44, 68)
     private val muted = Color.rgb(112, 126, 149)
@@ -45,7 +48,11 @@ class MainActivity : ComponentActivity() {
         settings()
     }
 
-    override fun onBackPressed() {\n        if (viewingFullscreenImage) { viewingFullscreenImage = false; home() } else super.onBackPressed()\n    }\n\n    override fun onCreate(savedInstanceState: Bundle?) {
+    override fun onBackPressed() {
+        if (viewingFullscreenImage) { viewingFullscreenImage = false; home() } else super.onBackPressed()
+    }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         File(filesDir, "private_media").mkdirs()
         if (prefs.getString("password_hash", null).isNullOrBlank()) setup() else login()
