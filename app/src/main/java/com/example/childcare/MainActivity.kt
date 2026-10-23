@@ -78,7 +78,7 @@ class MainActivity : ComponentActivity() {
     private fun field(hintText: String, password: Boolean = false, transparent: Boolean = false) = EditText(this).apply {
         hint = hintText; setSingleLine(true); textSize = 15f
         inputType = if (password) InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD else InputType.TYPE_CLASS_TEXT
-        background = bg(if (transparent) 0x55FFFFFF else Color.WHITE, 12)
+        background = bg(if (transparent) 0x33FFFFFF else Color.WHITE, 12)
         if (transparent) { setTextColor(Color.WHITE); setHintTextColor(0xDDFFFFFF.toInt()) }
         setPadding(dp(14), dp(8), dp(14), dp(8))
     }
@@ -106,9 +106,13 @@ class MainActivity : ComponentActivity() {
         c.addView(btn("创建并进入相册", true) {
             if (p.text.length < 6) { p.error = "密码至少 6 位"; return@btn }
             if (p.text.toString() != again.text.toString()) { again.error = "两次密码不一致"; return@btn }
+            val recovery = UUID.randomUUID().toString().replace("-", "").take(12).uppercase()
             prefs.edit().putString("username", user.text.toString().trim().ifBlank { "admin" })
-                .putString("password_hash", hash(p.text.toString())).apply()
-            home()
+                .putString("password_hash", hash(p.text.toString()))
+                .putString("recovery_code_hash", hash(recovery)).apply()
+            AlertDialog.Builder(this).setTitle("请保存密码找回码")
+                .setMessage("找回码：\n\n" + recovery + "\n\n请抄写并保存在安全的地方。忘记密码时需要使用此找回码；为安全起见，本应用不会再次显示完整找回码。")
+                .setCancelable(false).setPositiveButton("已保存，进入相册") { _, _ -> home() }.show()
         })
         gap(c, 18)
         c.addView(text("文件保存在本机应用私有空间，不会自动上传云端。", 12f, muted))
@@ -130,7 +134,7 @@ class MainActivity : ComponentActivity() {
         root.addView(View(this).apply { setBackgroundColor(0x220C2148) }, FrameLayout.LayoutParams(-1, -1))
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(28), dp(24), dp(28))
-            background = bg(0x66FFFFFF, 26); elevation = dp(10).toFloat()
+            background = bg(0x990C2148.toInt(), 26); elevation = dp(10).toFloat
         }
         card.addView(text("◈", 42f, blue, true).apply { gravity = Gravity.CENTER })
         card.addView(text("我的相册", 29f, Color.WHITE, true).apply { gravity = Gravity.CENTER }); gap(card, 5)
