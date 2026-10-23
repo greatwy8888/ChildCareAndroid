@@ -75,10 +75,12 @@ class MainActivity : ComponentActivity() {
             setPadding(dp(13), dp(12), dp(13), dp(12))
             setOnClickListener { action() }
         }
-    private fun field(hintText: String, password: Boolean = false) = EditText(this).apply {
+    private fun field(hintText: String, password: Boolean = false, transparent: Boolean = false) = EditText(this).apply {
         hint = hintText; setSingleLine(true); textSize = 15f
         inputType = if (password) InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD else InputType.TYPE_CLASS_TEXT
-        background = bg(Color.WHITE, 12); setPadding(dp(14), dp(8), dp(14), dp(8))
+        background = bg(if (transparent) 0x55FFFFFF else Color.WHITE, 12)
+        if (transparent) { setTextColor(Color.WHITE); setHintTextColor(0xDDFFFFFF.toInt()) }
+        setPadding(dp(14), dp(8), dp(14), dp(8))
     }
     private fun page(c: LinearLayout) {
         val scroll = ScrollView(this)
@@ -95,7 +97,7 @@ class MainActivity : ComponentActivity() {
 
     private fun setup() {
         val c = col()
-        c.addView(text("✦  私密相册", 30f, blue, true)); gap(c, 8)
+        c.addView(text("✦  我的相册", 30f, blue, true)); gap(c, 8)
         c.addView(text("创建密码，保护照片和视频", 14f, muted)); gap(c, 28)
         val user = field("用户名（默认 admin）").apply { setText("admin") }
         val p = field("设置密码（至少 6 位）", true)
@@ -125,23 +127,29 @@ class MainActivity : ComponentActivity() {
         } else {
             root.background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(33,111,232), Color.rgb(116,92,246), Color.rgb(229,241,255)))
         }
-        root.addView(View(this).apply { setBackgroundColor(0x440C2148) }, FrameLayout.LayoutParams(-1, -1))
+        root.addView(View(this).apply { setBackgroundColor(0x220C2148) }, FrameLayout.LayoutParams(-1, -1))
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(28), dp(24), dp(28))
-            background = bg(0xF7FFFFFF.toInt(), 26); elevation = dp(10).toFloat()
+            background = bg(0x66FFFFFF, 26); elevation = dp(10).toFloat()
         }
         card.addView(text("◈", 42f, blue, true).apply { gravity = Gravity.CENTER })
-        card.addView(text("雄哥相册", 29f, ink, true).apply { gravity = Gravity.CENTER }); gap(card, 5)
-        card.addView(text("珍藏每一份美好回忆", 14f, muted).apply { gravity = Gravity.CENTER }); gap(card, 26)
-        val user = field("用户名").apply { setText(prefs.getString("username", "admin")) }
-        val p = field("登录密码", true)
+        card.addView(text("我的相册", 29f, Color.WHITE, true).apply { gravity = Gravity.CENTER }); gap(card, 5)
+        card.addView(text("珍藏每一份美好回忆", 14f, Color.WHITE).apply { gravity = Gravity.CENTER }); gap(card, 26)
+        val user = field("用户名", transparent = true).apply { setText(prefs.getString("username", "admin")) }
+        val p = field("登录密码", true, true)
         addField(card, user); addField(card, p)
         card.addView(btn("登 录", true) {
             if (user.text.toString().trim() == prefs.getString("username", "admin") && hash(p.text.toString()) == prefs.getString("password_hash", "")) home()
             else p.error = "用户名或密码不正确"
         })
-        gap(card, 18)
-        card.addView(text("本地存储 · 私密管理", 12f, muted).apply { gravity = Gravity.CENTER })
+        gap(card, 8)
+        val links = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        links.addView(text("忘记密码？", 13f, Color.WHITE).apply {
+            setPadding(dp(2), dp(8), dp(12), dp(8))
+            setOnClickListener { forgotPassword() }
+        }, LinearLayout.LayoutParams(0, -2, 1f))
+        links.addView(text("本地私密存储", 12f, Color.WHITE).apply { gravity = Gravity.CENTER })
+        card.addView(links)
         root.addView(card, FrameLayout.LayoutParams(-1, -2, Gravity.CENTER).apply { setMargins(dp(28), dp(28), dp(28), dp(28)) })
         setContentView(root)
     }
@@ -180,7 +188,7 @@ class MainActivity : ComponentActivity() {
         c.setPadding(dp(18), dp(18), dp(18), dp(18))
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        titles.addView(text("雄哥相册", 26f, ink, true))
+        titles.addView(text("我的相册", 26f, ink, true))
         titles.addView(text("珍藏美好 · 私密相册", 12f, muted))
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(btn("⌕ 搜索") { searchItems() })
@@ -452,6 +460,7 @@ class MainActivity : ComponentActivity() {
         c.addView(text("个性化你的私密相册", 13f, muted)); gap(c, 20)
         c.addView(text("账号与安全", 14f, muted, true)); gap(c, 8)
         c.addView(settingRow("🔐", "修改密码", "定期更新登录密码") { changePassword() }); gap(c, 8)
+        c.addView(settingRow("🗝", "设置找回码", "忘记密码时用于验证身份") { configureRecovery() }); gap(c, 8)
         c.addView(settingRow("🖼", "更换登录背景", "使用你喜欢的图片") { bgPicker.launch(arrayOf("image/*")) }); gap(c, 18)
         c.addView(text("存储与隐私", 14f, muted, true)); gap(c, 8)
         c.addView(settingRow("🛡", "本地隐私保护", "媒体仅保存在应用私有目录") {
@@ -459,9 +468,9 @@ class MainActivity : ComponentActivity() {
                 .setMessage("导入的照片和视频会复制到雄哥相册的私有目录，与系统相册独立保存。从系统相册删除原图不会删除这里的副本。卸载 App 或清除 App 数据会删除本地文件，请提前备份。")
                 .setPositiveButton("知道了", null).show()
         }); gap(c, 8)
-        c.addView(settingRow("ℹ", "关于雄哥相册", "版本 1.2.0 · 私密本地相册") {
-            AlertDialog.Builder(this).setTitle("雄哥相册")
-                .setMessage("珍藏美好 · 私密相册\n\n照片与视频在本机独立保存，不会自动上传云端。请妥善保管登录密码，并注意备份重要文件。")
+        c.addView(settingRow("ℹ", "关于我的相册", "版本 1.3.0 · 私密本地相册") {
+            AlertDialog.Builder(this).setTitle("我的相册")
+                .setMessage("珍藏美好 · 私密相册\n\n照片与视频在本机独立保存，不会自动上传云端。请妥善保管登录密码和找回码，并注意备份重要文件。")
                 .setPositiveButton("确定", null).show()
         }); gap(c, 18)
         c.addView(btn("返回相册", true) { folder = "root"; home() }); gap(c, 10)
@@ -482,6 +491,65 @@ class MainActivity : ComponentActivity() {
         row.addView(text("›", 25f, muted))
         row.setOnClickListener { action() }
         return row
+    }
+
+    private fun recoveryCode(): String = prefs.getString("recovery_code_plain", null) ?: ""
+
+    private fun configureRecovery() {
+        val c = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(8), dp(18), 0) }
+        val current = field("当前登录密码", true)
+        addField(c, current)
+        val dialog = AlertDialog.Builder(this).setTitle("设置找回密码凭据")
+            .setMessage("为保护相册隐私，需要先验证当前密码。设置后会生成一组找回码，请妥善保存。")
+            .setView(c).setNegativeButton("取消", null).setPositiveButton("验证并生成", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (hash(current.text.toString()) != prefs.getString("password_hash", "")) {
+                    current.error = "当前密码不正确"; return@setOnClickListener
+                }
+                val code = UUID.randomUUID().toString().replace("-", "").take(12).uppercase()
+                prefs.edit().putString("recovery_code_hash", hash(code)).apply()
+                dialog.dismiss()
+                AlertDialog.Builder(this).setTitle("请保存密码找回码")
+                    .setMessage("找回码：\n\n" + code + "\n\n请抄写并保存在安全的地方。它只用于忘记密码时重设登录密码。为安全起见，本应用不会再次显示完整找回码。")
+                    .setPositiveButton("已保存") { _, _ -> settings() }.show()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun forgotPassword() {
+        if (prefs.getString("recovery_code_hash", null).isNullOrBlank()) {
+            AlertDialog.Builder(this).setTitle("尚未设置找回码")
+                .setMessage("此账号还没有密码找回码。为保护相册隐私，不能仅凭用户名直接重设密码。如果你仍能登录，请进入“我的 → 设置找回码”先行设置；如果已忘记密码且未设置找回码，本应用无法验证账号所有权。")
+                .setPositiveButton("知道了", null).show()
+            return
+        }
+        val c = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(8), dp(18), 0) }
+        val user = field("用户名").apply { setText(prefs.getString("username", "admin")) }
+        val code = field("密码找回码")
+        val next = field("新密码（至少 6 位）", true)
+        val again = field("确认新密码", true)
+        addField(c, user); addField(c, code); addField(c, next); addField(c, again)
+        val dialog = AlertDialog.Builder(this).setTitle("找回登录密码").setView(c)
+            .setNegativeButton("取消", null).setPositiveButton("重设密码", null).create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                if (user.text.toString().trim() != prefs.getString("username", "admin")) {
+                    user.error = "用户名不正确"; return@setOnClickListener
+                }
+                if (hash(code.text.toString().trim().uppercase()) != prefs.getString("recovery_code_hash", "")) {
+                    code.error = "找回码不正确"; return@setOnClickListener
+                }
+                if (next.text.length < 6) { next.error = "密码至少 6 位"; return@setOnClickListener }
+                if (next.text.toString() != again.text.toString()) { again.error = "两次密码不一致"; return@setOnClickListener }
+                prefs.edit().putString("password_hash", hash(next.text.toString())).apply()
+                dialog.dismiss()
+                toast("密码已重设，请重新登录")
+                login()
+            }
+        }
+        dialog.show()
     }
 
     private fun changePassword() {
