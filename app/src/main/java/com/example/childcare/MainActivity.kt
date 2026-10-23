@@ -134,7 +134,7 @@ class MainActivity : ComponentActivity() {
         root.addView(View(this).apply { setBackgroundColor(0x220C2148) }, FrameLayout.LayoutParams(-1, -1))
         val card = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(28), dp(24), dp(28))
-            background = bg(0x990C2148.toInt(), 26); elevation = dp(10).toFloat
+            background = bg(0x990C2148.toInt(), 26); elevation = dp(10).toFloat()
         }
         card.addView(text("◈", 42f, blue, true).apply { gravity = Gravity.CENTER })
         card.addView(text("我的相册", 29f, Color.WHITE, true).apply { gravity = Gravity.CENTER }); gap(card, 5)
