@@ -729,14 +729,6 @@ class MainActivity : ComponentActivity() {
             actions.addView(btn("取消") { clearSelection(); home() })
         }
         c.addView(actions); gap(c, 10)
-        if (selectionMode && selectedItemIds.isNotEmpty()) {
-            val selectionBar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-            selectionBar.addView(text("已选择 ${selectedItemIds.size} 项", 13f, blue, true), LinearLayout.LayoutParams(0, -2, 1f))
-            selectionBar.addView(btn("移动到") { moveSelectedItems() })
-            selectionBar.addView(btn("删除") { deleteSelectedItems() })
-            selectionBar.addView(btn("取消") { clearSelection(); home() })
-            c.addView(selectionBar); gap(c, 8)
-        }
         if (visible.isEmpty()) {
             c.addView(text("此文件夹暂无文件", 15f, muted).apply { gravity = Gravity.CENTER })
         } else if (listMode) {
