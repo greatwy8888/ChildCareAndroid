@@ -54,7 +54,19 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onBackPressed() {
-        if (viewingFullscreenImage) { viewingFullscreenImage = false; home() } else if (folder != "root") { folder = "root"; home() } else super.onBackPressed()
+        if (viewingFullscreenImage) {
+            viewingFullscreenImage = false
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+            home()
+        } else if (folder != "root") {
+            folder = "root"; home()
+        } else {
+            AlertDialog.Builder(this).setTitle("退出私牍空间？")
+                .setMessage("确定要退出应用吗？")
+                .setNegativeButton("继续使用", null)
+                .setPositiveButton("退出") { _, _ -> finish() }.show()
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -201,7 +213,7 @@ class MainActivity : ComponentActivity() {
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         titles.addView(text("私牍空间", 26f, ink, true))
-        titles.addView(text("珍藏美好 · 私密相册", 12f, muted))
+        titles.addView(text("珍藏资料 · 私密文件", 12f, muted))
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(btn("⌕ 搜索") { searchItems() })
         header.addView(btn("＋") { showAddMenu() }, LinearLayout.LayoutParams(dp(54), dp(48)).apply { leftMargin = dp(8) })
@@ -252,7 +264,12 @@ class MainActivity : ComponentActivity() {
         gap(c, 20)
         val fileHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         fileHeader.addView(text(if (folder == "root") "最近添加" else (fm[folder] ?: "文件列表"), 18f, ink, true), LinearLayout.LayoutParams(0, -2, 1f))
-        fileHeader.addView(btn("查看全部") { folder = "root"; home() })
+        if (folder != "root") {
+            fileHeader.addView(btn("‹ 返回") { folder = "root"; home() })
+            fileHeader.addView(btn("⌂ 首页") { folder = "root"; home() })
+        }
+        fileHeader.addView(btn(if (listMode) "▦ 缩略图" else "☷ 文件列表") { listMode = !listMode; home() })
+        fileHeader.addView(btn("多选删除") { multiDelete(visible) })
         c.addView(fileHeader); gap(c, 10)
         val visible = if (folder == "root") all else all.filter { it.folder == folder }
         if (visible.isEmpty()) {
