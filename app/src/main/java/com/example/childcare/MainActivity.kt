@@ -509,16 +509,19 @@ class MainActivity : ComponentActivity() {
     private fun configureRecovery() {
         val c = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(18), dp(8), dp(18), 0) }
         val current = field("当前登录密码", true)
-        addField(c, current)
+        val custom = field("自定义新找回码（至少 6 位）")
+        addField(c, current); addField(c, custom)
         val dialog = AlertDialog.Builder(this).setTitle("设置找回密码凭据")
-            .setMessage("为保护相册隐私，需要先验证当前密码。设置后会生成一组找回码，请妥善保存。")
+            .setMessage("为保护相册隐私，需要先验证当前密码。请输入你希望使用的找回码，请妥善保存。")
             .setView(c).setNegativeButton("取消", null).setPositiveButton("验证并生成", null).create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 if (hash(current.text.toString()) != prefs.getString("password_hash", "")) {
                     current.error = "当前密码不正确"; return@setOnClickListener
                 }
-                val code = UUID.randomUUID().toString().replace("-", "").take(12).uppercase()
+                val code = custom.text.toString().trim().uppercase()
+                if (code.length < 6) { custom.error = "找回码至少 6 位"; return@setOnClickListener }
+                if (code.equals(current.text.toString(), true)) { custom.error = "找回码不能与登录密码相同"; return@setOnClickListener }
                 prefs.edit().putString("recovery_code_hash", hash(code)).apply()
                 dialog.dismiss()
                 AlertDialog.Builder(this).setTitle("请保存密码找回码")
