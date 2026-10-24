@@ -295,8 +295,8 @@ class MainActivity : ComponentActivity() {
         }
 
     private fun showAddMenu() {
-        AlertDialog.Builder(this).setTitle("添加内容").setItems(arrayOf("导入照片 / 视频", "新建文件夹")) { _, which ->
-            if (which == 0) importer.launch(arrayOf("image/*", "video/*")) else createFolder()
+        AlertDialog.Builder(this).setTitle("添加内容").setItems(arrayOf("导入照片 / 视频", "导入 PDF / TXT / HTML 等文档", "新建文件夹")) { _, which ->
+            when (which) { 0 -> importer.launch(arrayOf("image/*", "video/*")); 1 -> importer.launch(arrayOf("application/pdf", "text/plain", "text/html", "application/*", "text/*")); else -> createFolder() }
         }.show()
     }
 
@@ -585,13 +585,13 @@ class MainActivity : ComponentActivity() {
 
     private fun importFile(uri: Uri): Boolean {
         return try {
-        val mime = contentResolver.getType(uri) ?: return false
-        if (!mime.startsWith("image/") && !mime.startsWith("video/")) return false
-        var name = "媒体文件"
+        var mime = contentResolver.getType(uri) ?: "application/octet-stream"
+        var name = "文件"
         contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use {
             if (it.moveToFirst()) name = it.getString(0) ?: name
         }
         val ext = name.substringAfterLast('.', "").takeIf { it.length in 1..8 }?.let { "." + it } ?: ""
+        if (mime == "application/octet-stream") mime = when (ext.lowercase()) { ".pdf" -> "application/pdf"; ".txt" -> "text/plain"; ".html", ".htm" -> "text/html"; else -> "application/octet-stream" }
         val id = UUID.randomUUID().toString()
         val rel = "private_media/" + id + ext
         contentResolver.openInputStream(uri)?.use { input -> File(filesDir, rel).outputStream().use { output -> input.copyTo(output) } } ?: return false
