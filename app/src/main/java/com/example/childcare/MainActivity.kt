@@ -27,6 +27,7 @@ class MainActivity : ComponentActivity() {
     private val prefs by lazy { getSharedPreferences("private_gallery", Context.MODE_PRIVATE) }
     private var folder = "root"
     private var viewingFullscreenImage = false
+    private var listMode = false
     private val blue = Color.rgb(55, 126, 245)
     private val ink = Color.rgb(32, 44, 68)
     private val muted = Color.rgb(112, 126, 149)
@@ -204,7 +205,7 @@ class MainActivity : ComponentActivity() {
             elevation = dp(3).toFloat()
         }
         cover.addView(text("私牍空间", 19f, Color.WHITE, true)); gap(cover, 5)
-        cover.addView(text("照片与视频都安全保存在本机", 12f, 0xFFEAF2FF.toInt())); gap(cover, 16)
+        gap(cover, 16)
         val summary = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val photos = all.count { it.mime.startsWith("image/") }
         val videos = all.count { it.mime.startsWith("video/") }
@@ -222,7 +223,6 @@ class MainActivity : ComponentActivity() {
             emptyFolder.addView(text("📁", 27f), LinearLayout.LayoutParams(dp(48), dp(46)))
             val et = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             et.addView(text("创建你的第一个文件夹", 14f, ink, true))
-            et.addView(text("自定义文件夹管理", 12f, muted))
             emptyFolder.addView(et, LinearLayout.LayoutParams(0, -2, 1f))
             emptyFolder.setOnClickListener { createFolder() }; c.addView(emptyFolder)
         } else {
