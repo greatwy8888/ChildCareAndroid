@@ -641,17 +641,32 @@ class MainActivity : ComponentActivity() {
             root.addView(v, LinearLayout.LayoutParams(-1, -1))
             v.setOnPreparedListener { v.start() }
             setContentView(root)
-        } else {
+        } else if (item.mime.startsWith("image/")) {
             viewingFullscreenImage = true
             window.setFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN, android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
             window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
             val image = ImageView(this).apply {
-                setBackgroundColor(Color.BLACK)
-                scaleType = ImageView.ScaleType.FIT_CENTER
-                setImageBitmap(BitmapFactory.decodeFile(file.absolutePath))
-                contentDescription = item.name
+                setBackgroundColor(Color.BLACK); scaleType = ImageView.ScaleType.FIT_CENTER
+                setImageBitmap(BitmapFactory.decodeFile(file.absolutePath)); contentDescription = item.name
             }
             setContentView(image)
+        } else {
+            viewingFullscreenImage = false
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+            when {
+                item.mime == "text/plain" || item.name.endsWith(".txt", true) -> showTextDocument(item, file, false)
+                item.mime == "text/html" || item.name.endsWith(".html", true) || item.name.endsWith(".htm", true) -> showTextDocument(item, file, true)
+                item.mime == "application/pdf" || item.name.endsWith(".pdf", true) -> showPdfDocument(file, item.name)
+                else -> {
+                    val c = col()
+                    c.addView(text(item.name, 20f, ink, true)); gap(c, 10)
+                    c.addView(text("暂不支持直接预览此文件格式。", 14f, muted)); gap(c, 12)
+                    c.addView(btn("‹ 返回") { home() })
+                    c.addView(btn("⌂ 返回首页", true) { folder = "root"; home() })
+                    page(c)
+                }
+            }
         }
     }
 
