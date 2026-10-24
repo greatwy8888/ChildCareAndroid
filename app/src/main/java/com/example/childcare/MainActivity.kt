@@ -418,14 +418,19 @@ class MainActivity : ComponentActivity() {
             }
             frame.addView(badge, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(6), 0, 0, dp(6)) })
         }
-        if (selectedItemIds.contains(item.id)) {
-            frame.addView(TextView(this).apply {
-                text = "✓"; textSize = 16f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
-                background = bg(blue, 20); elevation = dp(3).toFloat()
-            }, FrameLayout.LayoutParams(dp(28), dp(28), Gravity.TOP or Gravity.END).apply { setMargins(0, dp(5), dp(5), 0) })
-            frame.foreground = android.graphics.drawable.GradientDrawable().apply {
-                setColor(0x22377EF5); setStroke(dp(3), blue); cornerRadius = dp(14).toFloat()
+        if (selectionMode) {
+            // Use the standard Android square checkbox; avoid decorative/custom selection styling.
+            val check = CheckBox(this).apply {
+                isChecked = selectedItemIds.contains(item.id)
+                isClickable = false
+                isFocusable = false
+                setPadding(0, 0, 0, 0)
+                buttonTintList = android.content.res.ColorStateList.valueOf(Color.DKGRAY)
+                setBackgroundColor(Color.TRANSPARENT)
             }
+            frame.addView(check, FrameLayout.LayoutParams(dp(42), dp(42), Gravity.TOP or Gravity.END).apply {
+                setMargins(0, dp(2), dp(2), 0)
+            })
         }
         frame.setOnClickListener {
             if (selectionMode) { toggleItemSelection(item); home() } else openItem(item)
