@@ -208,6 +208,7 @@ class MainActivity : ComponentActivity() {
     private fun home() {
         val all = items().sortedByDescending { it.time }
         val fm = folders()
+        if (folder != "root") { folderScreen(fm[folder] ?: "文件夹", all.filter { it.folder == folder }); return }
         val c = col()
         c.setPadding(dp(18), dp(18), dp(18), dp(18))
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
@@ -387,9 +388,19 @@ class MainActivity : ComponentActivity() {
                     opts.inSampleSize = maxOf(1, minOf(bounds.outWidth / 300, bounds.outHeight / 300))
                     setImageBitmap(BitmapFactory.decodeFile(file.absolutePath, opts))
                 } catch (_: Exception) { setImageDrawable(ColorDrawable(0xFFE5ECF7.toInt())) }
-            } else setImageDrawable(ColorDrawable(0xFF263B63.toInt()))
+            } else {
+                setBackgroundColor(0xFFE8EFFA.toInt())
+                setImageDrawable(null)
+            }
         }
         frame.addView(image, FrameLayout.LayoutParams(-1, -1))
+        if (!item.mime.startsWith("image/") && !item.mime.startsWith("video/")) {
+            val doc = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setBackgroundColor(0xFFE8EFFA.toInt()) }
+            val ext = item.name.substringAfterLast('.', "FILE").uppercase().take(5)
+            doc.addView(text(if (item.mime == "application/pdf") "▤" else "▧", 34f, blue, true).apply { gravity = Gravity.CENTER })
+            doc.addView(text(ext, 12f, ink, true).apply { gravity = Gravity.CENTER })
+            frame.addView(doc, FrameLayout.LayoutParams(-1, -1))
+        }
         if (item.mime.startsWith("video/")) {
             val badge = TextView(this).apply {
                 text = "▶ 视频"; textSize = 11f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
@@ -642,6 +653,115 @@ class MainActivity : ComponentActivity() {
             }
             setContentView(image)
         }
+    }
+
+    private fun folderScreen(title: String, visible: List<Item>) {
+        val c = col()
+        c.setPadding(dp(16), dp(12), dp(16), dp(18))
+        val bar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        bar.addView(btn("‹ 返回") { folder = "root"; home() })
+        bar.addView(text(title, 19f, ink, true), LinearLayout.LayoutParams(0, -2, 1f).apply { leftMargin = dp(8) })
+        bar.addView(btn("⌂ 首页") { folder = "root"; home() })
+        c.addView(bar); gap(c, 14)
+        val actions = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        actions.addView(text(visible.size.toString() + " 个文件", 13f, muted), LinearLayout.LayoutParams(0, -2, 1f))
+        actions.addView(btn(if (listMode) "▦ 缩略图" else "☷ 文件列表") { listMode = !listMode; folderScreen(title, visible) })
+        actions.addView(btn("多选删除") { multiDelete(visible) })
+        c.addView(actions); gap(c, 10)
+        if (visible.isEmpty()) {
+            c.addView(text("此文件夹暂无文件", 15f, muted).apply { gravity = Gravity.CENTER })
+        } else if (listMode) {
+            visible.forEach { c.addView(documentListRow(it)); gap(c, 6) }
+        } else {
+            val grid = GridLayout(this).apply { columnCount = 3; alignmentMode = GridLayout.ALIGN_BOUNDS; useDefaultMargins = false }
+            visible.forEach { item ->
+                val lp = GridLayout.LayoutParams().apply { width = 0; height = dp(126); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); rowSpec = GridLayout.spec(GridLayout.UNDEFINED); setMargins(dp(3), dp(3), dp(3), dp(3)) }
+                grid.addView(thumbnailTile(item), lp)
+            }
+            c.addView(grid)
+        }
+        c.addView(btn("返回首页", true) { folder = "root"; home() })
+        page(c)
+    }
+
+    private fun documentListRow(item: Item): View {
+        val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 14) }
+        row.addView(text(if (item.mime == "application/pdf") "▤" else if (item.mime.startsWith("image/")) "▧" else if (item.mime.startsWith("video/")) "▶" else "▣", 25f, blue, true), LinearLayout.LayoutParams(dp(44), dp(44)))
+        val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        info.addView(text(item.name, 14f, ink, true)); info.addView(text(item.mime, 11f, muted))
+        row.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(btn("打开") { openItem(item) })
+        row.setOnClickListener { openItem(item) }
+        row.setOnLongClickListener { itemMenu(item); true }
+        return row
+    }
+
+    private fun itemMenu(item: Item) {
+        AlertDialog.Builder(this).setTitle(item.name).setItems(arrayOf("打开", "删除")) { _, which ->
+            if (which == 0) openItem(item) else AlertDialog.Builder(this).setTitle("删除文件？")
+                .setMessage("确定永久删除此文件吗？").setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
+                    File(filesDir, item.path).delete(); saveItems(items().filterNot { it.id == item.id }); home()
+                }.show()
+        }.show()
+    }
+
+    private fun multiDelete(visible: List<Item>) {
+        if (visible.isEmpty()) { toast("当前没有可删除的文件"); return }
+        val names = visible.map { it.name }.toTypedArray()
+        val checked = BooleanArray(visible.size)
+        AlertDialog.Builder(this).setTitle("多选删除文件")
+            .setMultiChoiceItems(names, checked) { _, which, isChecked -> checked[which] = isChecked }
+            .setNegativeButton("取消", null).setPositiveButton("删除所选") { _, _ ->
+                val ids = visible.filterIndexed { i, _ -> checked[i] }.map { it.id }.toSet()
+                if (ids.isEmpty()) { toast("没有选择文件"); return@setPositiveButton }
+                AlertDialog.Builder(this).setTitle("确认删除")
+                    .setMessage("将永久删除选中的 " + ids.size + " 个文件。")
+                    .setNegativeButton("取消", null).setPositiveButton("确认删除") { _, _ ->
+                        items().filter { it.id in ids }.forEach { File(filesDir, it.path).delete() }
+                        saveItems(items().filterNot { it.id in ids }); home()
+                    }.show()
+            }.show()
+    }
+
+    private fun showPdfDocument(file: File, name: String) {
+        try {
+            val descriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY)
+            val renderer = PdfRenderer(descriptor)
+            val c = col()
+            c.addView(text(name, 20f, ink, true)); gap(c, 8)
+            c.addView(btn("‹ 返回") { renderer.close(); descriptor.close(); home() })
+            c.addView(btn("⌂ 返回首页") { renderer.close(); descriptor.close(); folder = "root"; home() }); gap(c, 10)
+            for (i in 0 until renderer.pageCount) {
+                val pg = renderer.openPage(i)
+                val bitmap = android.graphics.Bitmap.createBitmap(pg.width * 2, pg.height * 2, android.graphics.Bitmap.Config.ARGB_8888)
+                bitmap.eraseColor(Color.WHITE)
+                pg.render(bitmap, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                pg.close()
+                c.addView(ImageView(this).apply { setImageBitmap(bitmap); adjustViewBounds = true; scaleType = ImageView.ScaleType.FIT_CENTER }, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(12) })
+            }
+            page(c)
+        } catch (_: Exception) { toast("PDF 打开失败"); home() }
+    }
+
+    private fun showTextDocument(item: Item, file: File, html: Boolean) {
+        val c = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(12)); setBackgroundColor(Color.WHITE) }
+        val bar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        bar.addView(btn("‹ 返回") { home() })
+        bar.addView(text(item.name, 15f, ink, true), LinearLayout.LayoutParams(0, -2, 1f))
+        bar.addView(btn("⌂ 首页") { folder = "root"; home() })
+        c.addView(bar)
+        if (html) {
+            val web = WebView(this).apply {
+                setBackgroundColor(Color.WHITE); settings.javaScriptEnabled = false; webViewClient = WebViewClient()
+                loadDataWithBaseURL("file://" + file.parentFile?.absolutePath + "/", file.readText(Charsets.UTF_8), "text/html", "UTF-8", null)
+            }
+            c.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
+        } else {
+            val body = try { file.readText(Charsets.UTF_8) } catch (_: Exception) { "无法读取此文本文件" }
+            val tv = TextView(this).apply { text = body; textSize = 16f; setTextColor(Color.BLACK); setTextIsSelectable(true); gravity = Gravity.TOP; setPadding(dp(4), dp(12), dp(4), dp(12)) }
+            val scroll = ScrollView(this); scroll.addView(tv); c.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        }
+        setContentView(c)
     }
 
     private fun hash(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray(Charsets.UTF_8))
