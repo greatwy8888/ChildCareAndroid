@@ -236,6 +236,7 @@ class MainActivity : ComponentActivity() {
         c.addView(cover); gap(c, 22)
         val folderHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         folderHeader.addView(text("我的文件夹", 18f, ink, true), LinearLayout.LayoutParams(0, -2, 1f))
+        folderHeader.addView(btn("多选删除") { multiDeleteFolders() })
         folderHeader.addView(btn("＋ 新建") { createFolder() })
         c.addView(folderHeader); gap(c, 10)
         if (fm.isEmpty()) {
@@ -459,6 +460,35 @@ class MainActivity : ComponentActivity() {
                 val map = folders()
                 if (map.values.any { it.equals(name, true) }) { toast("名称已存在"); return@setPositiveButton }
                 map[UUID.randomUUID().toString()] = name; saveFolders(map); home()
+            }.show()
+    }
+
+    private fun multiDeleteFolders() {
+        val fm = folders()
+        if (fm.isEmpty()) { toast("没有可删除的文件夹"); return }
+        val ids = fm.keys.toList()
+        val names = ids.map { fm[it] ?: it }.toTypedArray()
+        val checked = BooleanArray(ids.size)
+        AlertDialog.Builder(this).setTitle("多选删除文件夹")
+            .setMultiChoiceItems(names, checked) { _, which, value -> checked[which] = value }
+            .setNegativeButton("取消", null).setPositiveButton("下一步") { _, _ ->
+                val chosen = ids.filterIndexed { i, _ -> checked[i] }.toSet()
+                if (chosen.isEmpty()) { toast("没有选择文件夹"); return@setPositiveButton }
+                val options = arrayOf("删除文件夹并保留文件（移到首页）", "删除文件夹及其中所有文件")
+                AlertDialog.Builder(this).setTitle("确认删除 " + chosen.size + " 个文件夹")
+                    .setSingleChoiceItems(options, 0, null)
+                    .setNegativeButton("取消", null).setPositiveButton("确认删除") { d, _ ->
+                        val list = items()
+                        val removeFiles = (d as? AlertDialog)?.listView?.checkedItemPosition == 1
+                        if (removeFiles) {
+                            list.filter { it.folder in chosen }.forEach { File(filesDir, it.path).delete() }
+                            saveItems(list.filterNot { it.folder in chosen })
+                        } else saveItems(list.map { if (it.folder in chosen) it.copy(folder = "root") else it })
+                        val remaining = folders().filterKeys { it !in chosen }
+                        saveFolders(remaining)
+                        if (folder in chosen) folder = "root"
+                        home()
+                    }.show()
             }.show()
     }
 
