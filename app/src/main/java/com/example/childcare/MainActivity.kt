@@ -97,7 +97,7 @@ class MainActivity : ComponentActivity() {
 
     private fun setup() {
         val c = col()
-        c.addView(text("✦  我的相册", 30f, blue, true)); gap(c, 8)
+        c.addView(text("✦  私牍空间", 30f, blue, true)); gap(c, 8)
         c.addView(text("创建密码，保护照片和视频", 14f, muted)); gap(c, 28)
         val user = field("用户名（默认 admin）").apply { setText("admin") }
         val p = field("设置密码（至少 6 位）", true)
@@ -137,7 +137,7 @@ class MainActivity : ComponentActivity() {
             background = bg(0x990C2148.toInt(), 26); elevation = dp(10).toFloat()
         }
         card.addView(text("◈", 42f, blue, true).apply { gravity = Gravity.CENTER })
-        card.addView(text("我的相册", 29f, Color.WHITE, true).apply { gravity = Gravity.CENTER }); gap(card, 5)
+        card.addView(text("私牍空间", 29f, Color.WHITE, true).apply { gravity = Gravity.CENTER }); gap(card, 5)
         card.addView(text("珍藏每一份美好回忆", 14f, Color.WHITE).apply { gravity = Gravity.CENTER }); gap(card, 26)
         val user = field("用户名", transparent = true).apply { setText(prefs.getString("username", "admin")) }
         val p = field("登录密码", true, true)
@@ -192,7 +192,7 @@ class MainActivity : ComponentActivity() {
         c.setPadding(dp(18), dp(18), dp(18), dp(18))
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val titles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        titles.addView(text("我的相册", 26f, ink, true))
+        titles.addView(text("私牍空间", 26f, ink, true))
         titles.addView(text("珍藏美好 · 私密相册", 12f, muted))
         header.addView(titles, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(btn("⌕ 搜索") { searchItems() })
@@ -203,7 +203,7 @@ class MainActivity : ComponentActivity() {
             background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(Color.rgb(38,133,239), Color.rgb(93,91,238))).apply { cornerRadius = dp(22).toFloat() }
             elevation = dp(3).toFloat()
         }
-        cover.addView(text("我的相册", 19f, Color.WHITE, true)); gap(cover, 5)
+        cover.addView(text("私牍空间", 19f, Color.WHITE, true)); gap(cover, 5)
         cover.addView(text("照片与视频都安全保存在本机", 12f, 0xFFEAF2FF.toInt())); gap(cover, 16)
         val summary = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val photos = all.count { it.mime.startsWith("image/") }
@@ -222,7 +222,7 @@ class MainActivity : ComponentActivity() {
             emptyFolder.addView(text("📁", 27f), LinearLayout.LayoutParams(dp(48), dp(46)))
             val et = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
             et.addView(text("创建你的第一个文件夹", 14f, ink, true))
-            et.addView(text("按旅行、家人、宠物等分类整理", 12f, muted))
+            et.addView(text("自定义文件夹管理", 12f, muted))
             emptyFolder.addView(et, LinearLayout.LayoutParams(0, -2, 1f))
             emptyFolder.setOnClickListener { createFolder() }; c.addView(emptyFolder)
         } else {
@@ -323,7 +323,7 @@ class MainActivity : ComponentActivity() {
         c.addView(text("发现", 25f, ink, true)); gap(c, 8)
         c.addView(text("让回忆更有条理", 15f, muted)); gap(c, 18)
         listOf(Triple("📷", "照片与视频", "所有导入内容均保存在应用私有空间"),
-            Triple("📁", "自定义文件夹", "按旅行、家人、宠物等主题整理"),
+            Triple("📁", "自定义文件夹", "自定义文件夹管理"),
             Triple("🔒", "隐私保护", "登录密码保护，不会自动上传云端")).forEach { (icon, title, desc) ->
             val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; background = bg(Color.WHITE, 16); setPadding(dp(14), dp(14), dp(14), dp(14)) }
             row.addView(text(icon, 26f), LinearLayout.LayoutParams(dp(48), dp(48)))
@@ -381,7 +381,7 @@ class MainActivity : ComponentActivity() {
                     1 -> renameItem(item)
                     2 -> moveItem(item)
                     3 -> AlertDialog.Builder(this).setTitle("删除文件？")
-                        .setMessage("确定从雄哥相册中永久删除此文件吗？此操作不会删除系统相册中的原图。")
+                        .setMessage("确定从私牍空间中永久删除此文件吗？此操作不会删除系统相册中的原图。")
                         .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
                             file.delete(); saveItems(items().filterNot { it.id == item.id }); home()
                         }.show()
@@ -469,11 +469,11 @@ class MainActivity : ComponentActivity() {
         c.addView(text("存储与隐私", 14f, muted, true)); gap(c, 8)
         c.addView(settingRow("🛡", "本地隐私保护", "媒体仅保存在应用私有目录") {
             AlertDialog.Builder(this).setTitle("本地隐私保护")
-                .setMessage("导入的照片和视频会复制到雄哥相册的私有目录，与系统相册独立保存。从系统相册删除原图不会删除这里的副本。卸载 App 或清除 App 数据会删除本地文件，请提前备份。")
+                .setMessage("导入的照片和视频会复制到私牍空间的私有目录，与系统相册独立保存。从系统相册删除原图不会删除这里的副本。卸载 App 或清除 App 数据会删除本地文件，请提前备份。")
                 .setPositiveButton("知道了", null).show()
         }); gap(c, 8)
-        c.addView(settingRow("ℹ", "关于我的相册", "版本 1.3.0 · 私密本地相册") {
-            AlertDialog.Builder(this).setTitle("我的相册")
+        c.addView(settingRow("ℹ", "关于私牍空间", "版本 1.3.0 · 私密本地相册") {
+            AlertDialog.Builder(this).setTitle("私牍空间")
                 .setMessage("珍藏美好 · 私密相册\n\n照片与视频在本机独立保存，不会自动上传云端。请妥善保管登录密码和找回码，并注意备份重要文件。")
                 .setPositiveButton("确定", null).show()
         }); gap(c, 18)
