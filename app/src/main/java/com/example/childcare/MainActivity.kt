@@ -32,6 +32,8 @@ class MainActivity : ComponentActivity() {
     private var folder = "root"
     private var viewingFullscreenImage = false
     private var listMode = false
+    private var selectionMode = false
+    private val selectedItemIds = linkedSetOf<String>()
     private val blue = Color.rgb(55, 126, 245)
     private val ink = Color.rgb(32, 44, 68)
     private val muted = Color.rgb(112, 126, 149)
@@ -236,7 +238,6 @@ class MainActivity : ComponentActivity() {
         c.addView(cover); gap(c, 22)
         val folderHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         folderHeader.addView(text("我的文件夹", 18f, ink, true), LinearLayout.LayoutParams(0, -2, 1f))
-        folderHeader.addView(btn("多选删除") { multiDeleteFolders() })
         folderHeader.addView(btn("＋ 新建") { createFolder() })
         c.addView(folderHeader); gap(c, 10)
         if (fm.isEmpty()) {
@@ -272,7 +273,11 @@ class MainActivity : ComponentActivity() {
             fileHeader.addView(btn("⌂ 首页") { folder = "root"; home() })
         }
         fileHeader.addView(btn(if (listMode) "▦ 缩略图" else "☷ 文件列表") { listMode = !listMode; home() })
-        fileHeader.addView(btn("多选删除") { multiDelete(visible) })
+        if (selectionMode && selectedItemIds.isNotEmpty()) {
+            fileHeader.addView(btn("移动(${selectedItemIds.size})") { moveSelectedItems() })
+            fileHeader.addView(btn("删除") { deleteSelectedItems() })
+            fileHeader.addView(btn("取消") { clearSelection(); home() })
+        }
         c.addView(fileHeader); gap(c, 10)
         if (visible.isEmpty()) {
             val empty = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(16), dp(30), dp(16), dp(30)); background = bg(Color.WHITE, 20) }
@@ -413,20 +418,22 @@ class MainActivity : ComponentActivity() {
             }
             frame.addView(badge, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(6), 0, 0, dp(6)) })
         }
-        frame.setOnClickListener { openItem(item) }
+        if (selectedItemIds.contains(item.id)) {
+            frame.addView(TextView(this).apply {
+                text = "✓"; textSize = 16f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
+                background = bg(blue, 20); elevation = dp(3).toFloat()
+            }, FrameLayout.LayoutParams(dp(28), dp(28), Gravity.TOP or Gravity.END).apply { setMargins(0, dp(5), dp(5), 0) })
+            frame.foreground = android.graphics.drawable.GradientDrawable().apply {
+                setColor(0x22377EF5); setStroke(dp(3), blue); cornerRadius = dp(14).toFloat()
+            }
+        }
+        frame.setOnClickListener {
+            if (selectionMode) { toggleItemSelection(item); home() } else openItem(item)
+        }
         frame.setOnLongClickListener {
-            AlertDialog.Builder(this).setTitle(item.name).setItems(arrayOf("查看", "重命名", "移动到文件夹", "删除")) { _, which ->
-                when (which) {
-                    0 -> openItem(item)
-                    1 -> renameItem(item)
-                    2 -> moveItem(item)
-                    3 -> AlertDialog.Builder(this).setTitle("删除文件？")
-                        .setMessage("确定从私牍空间中永久删除此文件吗？此操作不会删除系统相册中的原图。")
-                        .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
-                            file.delete(); saveItems(items().filterNot { it.id == item.id }); home()
-                        }.show()
-                }
-            }.show()
+            if (!selectionMode) selectionMode = true
+            toggleItemSelection(item)
+            home()
             true
         }
         return frame
@@ -715,8 +722,21 @@ class MainActivity : ComponentActivity() {
         val actions = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         actions.addView(text(visible.size.toString() + " 个文件", 13f, muted), LinearLayout.LayoutParams(0, -2, 1f))
         actions.addView(btn(if (listMode) "▦ 缩略图" else "☷ 文件列表") { listMode = !listMode; folderScreen(title, visible) })
-        actions.addView(btn("多选删除") { multiDelete(visible) })
+        actions.addView(btn("＋ 上传") { showAddMenu() })
+        if (selectionMode && selectedItemIds.isNotEmpty()) {
+            actions.addView(btn("移动(${selectedItemIds.size})") { moveSelectedItems() })
+            actions.addView(btn("删除") { deleteSelectedItems() })
+            actions.addView(btn("取消") { clearSelection(); home() })
+        }
         c.addView(actions); gap(c, 10)
+        if (selectionMode && selectedItemIds.isNotEmpty()) {
+            val selectionBar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+            selectionBar.addView(text("已选择 ${selectedItemIds.size} 项", 13f, blue, true), LinearLayout.LayoutParams(0, -2, 1f))
+            selectionBar.addView(btn("移动到") { moveSelectedItems() })
+            selectionBar.addView(btn("删除") { deleteSelectedItems() })
+            selectionBar.addView(btn("取消") { clearSelection(); home() })
+            c.addView(selectionBar); gap(c, 8)
+        }
         if (visible.isEmpty()) {
             c.addView(text("此文件夹暂无文件", 15f, muted).apply { gravity = Gravity.CENTER })
         } else if (listMode) {
@@ -740,8 +760,8 @@ class MainActivity : ComponentActivity() {
         info.addView(text(item.name, 14f, ink, true)); info.addView(text(item.mime, 11f, muted))
         row.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
         row.addView(btn("打开") { openItem(item) })
-        row.setOnClickListener { openItem(item) }
-        row.setOnLongClickListener { itemMenu(item); true }
+        row.setOnClickListener { if (selectionMode) { toggleItemSelection(item); home() } else openItem(item) }
+        row.setOnLongClickListener { if (!selectionMode) selectionMode = true; toggleItemSelection(item); home(); true }
         return row
     }
 
@@ -752,6 +772,45 @@ class MainActivity : ComponentActivity() {
                     File(filesDir, item.path).delete(); saveItems(items().filterNot { it.id == item.id }); home()
                 }.show()
         }.show()
+    }
+
+    private fun toggleItemSelection(item: Item) {
+        if (!selectedItemIds.add(item.id)) selectedItemIds.remove(item.id)
+        if (selectedItemIds.isEmpty()) selectionMode = false
+    }
+
+    private fun clearSelection() {
+        selectedItemIds.clear()
+        selectionMode = false
+    }
+
+    private fun moveSelectedItems() {
+        val chosen = items().filter { it.id in selectedItemIds }
+        val targets = folders().entries.toList()
+        val labels = (listOf("首页（全部文件）") + targets.map { it.value }).toTypedArray()
+        if (chosen.isEmpty()) { clearSelection(); home(); return }
+        AlertDialog.Builder(this).setTitle("移动 ${chosen.size} 个文件到")
+            .setItems(labels) { _, which ->
+                val destination = if (which == 0) "root" else targets[which - 1].key
+                val ids = chosen.map { it.id }.toSet()
+                saveItems(items().map { if (it.id in ids) it.copy(folder = destination) else it })
+                clearSelection()
+                toast("已移动 ${ids.size} 个文件")
+                home()
+            }.setNegativeButton("取消", null).show()
+    }
+
+    private fun deleteSelectedItems() {
+        val ids = selectedItemIds.toSet()
+        if (ids.isEmpty()) { clearSelection(); home(); return }
+        AlertDialog.Builder(this).setTitle("确认删除")
+            .setMessage("将永久删除选中的 ${ids.size} 个文件。")
+            .setNegativeButton("取消", null).setPositiveButton("删除") { _, _ ->
+                items().filter { it.id in ids }.forEach { File(filesDir, it.path).delete() }
+                saveItems(items().filterNot { it.id in ids })
+                clearSelection()
+                home()
+            }.show()
     }
 
     private fun multiDelete(visible: List<Item>) {
