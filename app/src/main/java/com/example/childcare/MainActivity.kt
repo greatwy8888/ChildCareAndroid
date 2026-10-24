@@ -281,13 +281,17 @@ class MainActivity : ComponentActivity() {
             empty.addView(text("点击右上角 + 导入照片或视频", 12f, muted).apply { gravity = Gravity.CENTER })
             c.addView(empty)
         } else {
-            val grid = GridLayout(this).apply { columnCount = 3; useDefaultMargins = false }
-            visible.take(60).forEach { item ->
-                val lp = GridLayout.LayoutParams().apply { width = 0; height = dp(126); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(dp(3), dp(3), dp(3), dp(3)) }
-                grid.addView(thumbnailTile(item), lp)
+            if (listMode) {
+                visible.take(300).forEach { item -> c.addView(documentListRow(item)); gap(c, 6) }
+            } else {
+                val grid = GridLayout(this).apply { columnCount = 3; alignmentMode = GridLayout.ALIGN_BOUNDS; useDefaultMargins = false }
+                visible.take(300).forEach { item ->
+                    val lp = GridLayout.LayoutParams().apply { width = 0; height = dp(126); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); rowSpec = GridLayout.spec(GridLayout.UNDEFINED); setMargins(dp(3), dp(3), dp(3), dp(3)) }
+                    grid.addView(thumbnailTile(item), lp)
+                }
+                c.addView(grid)
             }
-            c.addView(grid)
-            if (visible.size > 60) { gap(c, 8); c.addView(text("显示最近 60 个文件，共 " + visible.size + " 个", 12f, muted)) }
+            if (visible.size > 300) { gap(c, 8); c.addView(text("显示最近 300 个文件，共 " + visible.size + " 个", 12f, muted)) }
         }
         gap(c, 18)
         val nav = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; background = bg(Color.WHITE, 18); setPadding(dp(6), dp(7), dp(6), dp(7)) }
@@ -539,7 +543,7 @@ class MainActivity : ComponentActivity() {
         }); gap(c, 8)
         c.addView(settingRow("ℹ", "关于私牍空间", "版本 1.3.0 · 私密本地相册") {
             AlertDialog.Builder(this).setTitle("私牍空间")
-                .setMessage("珍藏美好 · 私密相册\n\n照片与视频在本机独立保存，不会自动上传云端。请妥善保管登录密码和找回码，并注意备份重要文件。")
+                .setMessage("珍藏资料 · 私密文件\n\n照片与视频在本机独立保存，不会自动上传云端。请妥善保管登录密码和找回码，并注意备份重要文件。")
                 .setPositiveButton("确定", null).show()
         }); gap(c, 18)
         c.addView(btn("返回相册", true) { folder = "root"; home() }); gap(c, 10)
