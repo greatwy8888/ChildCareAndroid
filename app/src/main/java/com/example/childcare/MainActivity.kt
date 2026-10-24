@@ -115,7 +115,7 @@ class MainActivity : ComponentActivity() {
     private fun setup() {
         val c = col()
         c.addView(text("✦  私牍空间", 30f, blue, true)); gap(c, 8)
-        c.addView(text("创建密码，保护照片和视频", 14f, muted)); gap(c, 28)
+        c.addView(text("珍藏资料，私密文件", 14f, muted)); gap(c, 28)
         val user = field("用户名（默认 admin）").apply { setText("admin") }
         val p = field("设置密码（至少 6 位）", true)
         val again = field("再次输入密码", true)
@@ -158,7 +158,7 @@ class MainActivity : ComponentActivity() {
         }
         card.addView(text("◈", 42f, blue, true).apply { gravity = Gravity.CENTER })
         card.addView(text("私牍空间", 29f, Color.WHITE, true).apply { gravity = Gravity.CENTER }); gap(card, 5)
-        card.addView(text("珍藏每一份美好回忆", 14f, Color.WHITE).apply { gravity = Gravity.CENTER }); gap(card, 26)
+        card.addView(text("珍藏资料，私密文件", 14f, Color.WHITE).apply { gravity = Gravity.CENTER }); gap(card, 26)
         val user = field("用户名", transparent = true).apply { setText(prefs.getString("username", "admin")) }
         val p = field("登录密码", true, true)
         addField(card, user); addField(card, p)
@@ -802,7 +802,7 @@ class MainActivity : ComponentActivity() {
         if (html) {
             val web = WebView(this).apply {
                 setBackgroundColor(Color.WHITE); settings.javaScriptEnabled = false; webViewClient = WebViewClient()
-                loadDataWithBaseURL("file://" + file.parentFile?.absolutePath + "/", file.readText(Charsets.UTF_8), "text/html", "UTF-8", null)
+                loadDataWithBaseURL(null, file.readText(Charsets.UTF_8), "text/html", "UTF-8", null)
             }
             c.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
         } else {
