@@ -264,6 +264,7 @@ class MainActivity : ComponentActivity() {
             c.addView(fg)
         }
         gap(c, 20)
+        val visible = if (folder == "root") all else all.filter { it.folder == folder }
         val fileHeader = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         fileHeader.addView(text(if (folder == "root") "最近添加" else (fm[folder] ?: "文件列表"), 18f, ink, true), LinearLayout.LayoutParams(0, -2, 1f))
         if (folder != "root") {
@@ -273,7 +274,6 @@ class MainActivity : ComponentActivity() {
         fileHeader.addView(btn(if (listMode) "▦ 缩略图" else "☷ 文件列表") { listMode = !listMode; home() })
         fileHeader.addView(btn("多选删除") { multiDelete(visible) })
         c.addView(fileHeader); gap(c, 10)
-        val visible = if (folder == "root") all else all.filter { it.folder == folder }
         if (visible.isEmpty()) {
             val empty = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(16), dp(30), dp(16), dp(30)); background = bg(Color.WHITE, 20) }
             empty.addView(text("▧", 42f, blue, true).apply { gravity = Gravity.CENTER }); gap(empty, 8)
