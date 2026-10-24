@@ -434,13 +434,14 @@ class MainActivity : ComponentActivity() {
             frame.addView(badge, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(6), 0, 0, dp(6)) })
         }
         val downloadButton = TextView(this).apply {
-            text = "↓"; textSize = 19f; gravity = Gravity.CENTER; setTextColor(blue)
-            background = bg(0xF2FFFFFF.toInt(), 10); elevation = dp(3).toFloat()
+            text = "↓"; textSize = 13f; gravity = Gravity.CENTER; setTextColor(blue)
+            background = bg(0xF2FFFFFF.toInt(), 7); elevation = dp(2).toFloat()
             contentDescription = "下载 ${item.name}"
             setOnClickListener { downloadItem(item) }
         }
-        frame.addView(downloadButton, FrameLayout.LayoutParams(dp(34), dp(34), Gravity.BOTTOM or Gravity.END).apply {
-            setMargins(0, 0, dp(5), dp(5))
+        // Keep the download control compact and tucked into the thumbnail's bottom-right corner.
+        frame.addView(downloadButton, FrameLayout.LayoutParams(dp(22), dp(22), Gravity.BOTTOM or Gravity.END).apply {
+            setMargins(0, 0, dp(3), dp(3))
         })
         if (selectionMode) {
             // Use the standard Android square checkbox; avoid decorative/custom selection styling.
