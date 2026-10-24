@@ -1,6 +1,9 @@
 package com.example.childcare
 
+import android.Manifest
 import android.app.AlertDialog
+import android.content.ContentValues
+import android.content.pm.PackageManager
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.graphics.Color
@@ -9,6 +12,9 @@ import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.ColorDrawable
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.GridLayout
@@ -34,6 +40,7 @@ class MainActivity : ComponentActivity() {
     private var listMode = false
     private var selectionMode = false
     private val selectedItemIds = linkedSetOf<String>()
+    private var pendingDownloadItemId: String? = null
     private val blue = Color.rgb(55, 126, 245)
     private val ink = Color.rgb(32, 44, 68)
     private val muted = Color.rgb(112, 126, 149)
@@ -274,6 +281,7 @@ class MainActivity : ComponentActivity() {
         }
         fileHeader.addView(btn(if (listMode) "▦ 缩略图" else "☷ 文件列表") { listMode = !listMode; home() })
         if (selectionMode && selectedItemIds.isNotEmpty()) {
+            fileHeader.addView(btn("下载(${selectedItemIds.size})") { downloadSelectedItems() })
             fileHeader.addView(btn("移动(${selectedItemIds.size})") { moveSelectedItems() })
             fileHeader.addView(btn("删除") { deleteSelectedItems() })
             fileHeader.addView(btn("取消") { clearSelection(); home() })
@@ -418,6 +426,15 @@ class MainActivity : ComponentActivity() {
             }
             frame.addView(badge, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(6), 0, 0, dp(6)) })
         }
+        val downloadButton = TextView(this).apply {
+            text = "↓"; textSize = 19f; gravity = Gravity.CENTER; setTextColor(blue)
+            background = bg(0xF2FFFFFF.toInt(), 10); elevation = dp(3).toFloat()
+            contentDescription = "下载 ${item.name}"
+            setOnClickListener { downloadItem(item) }
+        }
+        frame.addView(downloadButton, FrameLayout.LayoutParams(dp(34), dp(34), Gravity.BOTTOM or Gravity.END).apply {
+            setMargins(0, 0, dp(5), dp(5))
+        })
         if (selectionMode) {
             // Use the standard Android square checkbox; avoid decorative/custom selection styling.
             val check = CheckBox(this).apply {
@@ -685,6 +702,7 @@ class MainActivity : ComponentActivity() {
             val v = VideoView(this)
             v.setVideoURI(Uri.fromFile(file)); v.setMediaController(MediaController(this))
             root.addView(v, LinearLayout.LayoutParams(-1, -1))
+            root.setOnLongClickListener { showFullscreenDownloadMenu(item); true }
             v.setOnPreparedListener { v.start() }
             setContentView(root)
         } else if (item.mime.startsWith("image/")) {
@@ -695,6 +713,7 @@ class MainActivity : ComponentActivity() {
                 setBackgroundColor(Color.BLACK); scaleType = ImageView.ScaleType.FIT_CENTER
                 setImageBitmap(BitmapFactory.decodeFile(file.absolutePath)); contentDescription = item.name
             }
+            image.setOnLongClickListener { showFullscreenDownloadMenu(item); true }
             setContentView(image)
         } else {
             viewingFullscreenImage = false
@@ -729,6 +748,7 @@ class MainActivity : ComponentActivity() {
         actions.addView(btn(if (listMode) "▦ 缩略图" else "☷ 文件列表") { listMode = !listMode; folderScreen(title, visible) })
         actions.addView(btn("＋ 上传") { showAddMenu() })
         if (selectionMode && selectedItemIds.isNotEmpty()) {
+            actions.addView(btn("下载(${selectedItemIds.size})") { downloadSelectedItems() })
             actions.addView(btn("移动(${selectedItemIds.size})") { moveSelectedItems() })
             actions.addView(btn("删除") { deleteSelectedItems() })
             actions.addView(btn("取消") { clearSelection(); home() })
@@ -769,6 +789,84 @@ class MainActivity : ComponentActivity() {
                     File(filesDir, item.path).delete(); saveItems(items().filterNot { it.id == item.id }); home()
                 }.show()
         }.show()
+    }
+
+    private fun showFullscreenDownloadMenu(item: Item) {
+        AlertDialog.Builder(this).setTitle(item.name)
+            .setItems(arrayOf("下载到手机 Download 文件夹")) { _, _ -> downloadItem(item) }
+            .setNegativeButton("取消", null).show()
+    }
+
+    private fun downloadSelectedItems() {
+        val chosen = items().filter { it.id in selectedItemIds }
+        if (chosen.isEmpty()) { toast("请先选择文件"); return }
+        var completed = 0
+        chosen.forEach { if (downloadItem(it, showToast = false)) completed++ }
+        clearSelection()
+        home()
+        toast("已开始下载 $completed/${chosen.size} 个文件")
+    }
+
+    @Suppress("DEPRECATION")
+    private fun downloadItem(item: Item, showToast: Boolean = true): Boolean {
+        val source = File(filesDir, item.path)
+        if (!source.exists()) { toast("文件不存在"); return false }
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.Downloads.DISPLAY_NAME, item.name)
+                    put(MediaStore.Downloads.MIME_TYPE, item.mime.ifBlank { "application/octet-stream" })
+                    put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/私牍空间")
+                    put(MediaStore.Downloads.IS_PENDING, 1)
+                }
+                val uri = contentResolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: throw java.io.IOException("无法创建下载文件")
+                try {
+                    contentResolver.openOutputStream(uri)?.use { output ->
+                        source.inputStream().use { input -> input.copyTo(output) }
+                    } ?: throw java.io.IOException("无法写入下载文件")
+                    val done = ContentValues().apply { put(MediaStore.Downloads.IS_PENDING, 0) }
+                    contentResolver.update(uri, done, null, null)
+                } catch (e: Exception) {
+                    contentResolver.delete(uri, null, null)
+                    throw e
+                }
+            } else {
+                if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+                    pendingDownloadItemId = item.id
+                    requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 7412)
+                    return false
+                }
+                val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "私牍空间")
+                if (!dir.exists() && !dir.mkdirs()) throw java.io.IOException("无法创建下载目录")
+                var destination = File(dir, item.name)
+                var index = 1
+                while (destination.exists()) {
+                    val base = item.name.substringBeforeLast('.', item.name)
+                    val ext = item.name.substringAfterLast('.', "").let { if (it.isBlank()) "" else ".$it" }
+                    destination = File(dir, "$base ($index)$ext")
+                    index++
+                }
+                source.inputStream().use { input -> destination.outputStream().use { output -> input.copyTo(output) } }
+            }
+            if (showToast) toast("已下载到 Download/私牍空间")
+            true
+        } catch (e: Exception) {
+            if (showToast) toast("下载失败：" + (e.message ?: "请检查存储空间"))
+            false
+        }
+    }
+
+    @Deprecated("Deprecated in Android API")
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == 7412) {
+            val id = pendingDownloadItemId
+            pendingDownloadItemId = null
+            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED && id != null) {
+                items().firstOrNull { it.id == id }?.let { downloadItem(it) }
+            } else toast("未授予存储权限，无法下载")
+        }
     }
 
     private fun toggleItemSelection(item: Item) {
