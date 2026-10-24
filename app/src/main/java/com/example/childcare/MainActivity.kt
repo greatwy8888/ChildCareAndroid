@@ -41,6 +41,13 @@ class MainActivity : ComponentActivity() {
     private var selectionMode = false
     private val selectedItemIds = linkedSetOf<String>()
     private var pendingDownloadItemId: String? = null
+    private val storagePermissionLauncher = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        val id = pendingDownloadItemId
+        pendingDownloadItemId = null
+        if (granted && id != null) {
+            items().firstOrNull { it.id == id }?.let { downloadItem(it) }
+        } else if (!granted) toast("未授予存储权限，无法下载")
+    }
     private val blue = Color.rgb(55, 126, 245)
     private val ink = Color.rgb(32, 44, 68)
     private val muted = Color.rgb(112, 126, 149)
@@ -834,7 +841,7 @@ class MainActivity : ComponentActivity() {
             } else {
                 if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
                     pendingDownloadItemId = item.id
-                    requestPermissions(arrayOf(Manifest.permission.WRITE_EXTERNAL_STORAGE), 7412)
+                    storagePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
                     return false
                 }
                 val dir = File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "私牍空间")
@@ -854,18 +861,6 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             if (showToast) toast("下载失败：" + (e.message ?: "请检查存储空间"))
             false
-        }
-    }
-
-    @Deprecated("Deprecated in Android API")
-    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
-        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 7412) {
-            val id = pendingDownloadItemId
-            pendingDownloadItemId = null
-            if (grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED && id != null) {
-                items().firstOrNull { it.id == id }?.let { downloadItem(it) }
-            } else toast("未授予存储权限，无法下载")
         }
     }
 
