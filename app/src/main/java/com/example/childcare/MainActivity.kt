@@ -7,6 +7,10 @@ import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.ColorDrawable
+import android.graphics.pdf.PdfRenderer
+import android.os.ParcelFileDescriptor
+import android.webkit.WebView
+import android.webkit.WebViewClient
 import android.widget.GridLayout
 import android.net.Uri
 import android.os.Bundle
@@ -50,7 +54,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onBackPressed() {
-        if (viewingFullscreenImage) { viewingFullscreenImage = false; home() } else super.onBackPressed()
+        if (viewingFullscreenImage) { viewingFullscreenImage = false; home() } else if (folder != "root") { folder = "root"; home() } else super.onBackPressed()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -103,11 +107,14 @@ class MainActivity : ComponentActivity() {
         val user = field("用户名（默认 admin）").apply { setText("admin") }
         val p = field("设置密码（至少 6 位）", true)
         val again = field("再次输入密码", true)
-        addField(c, user); addField(c, p); addField(c, again)
+        val recoveryInput = field("自定义找回码（至少 6 位）")
+        addField(c, user); addField(c, p); addField(c, again); addField(c, recoveryInput)
         c.addView(btn("创建并进入相册", true) {
             if (p.text.length < 6) { p.error = "密码至少 6 位"; return@btn }
             if (p.text.toString() != again.text.toString()) { again.error = "两次密码不一致"; return@btn }
-            val recovery = UUID.randomUUID().toString().replace("-", "").take(12).uppercase()
+            val recovery = recoveryInput.text.toString().trim().uppercase()
+            if (recovery.length < 6) { recoveryInput.error = "找回码至少 6 位"; return@btn }
+            if (recovery.equals(p.text.toString(), true)) { recoveryInput.error = "找回码不能与登录密码相同"; return@btn }
             prefs.edit().putString("username", user.text.toString().trim().ifBlank { "admin" })
                 .putString("password_hash", hash(p.text.toString()))
                 .putString("recovery_code_hash", hash(recovery)).apply()
