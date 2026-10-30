@@ -122,14 +122,15 @@ class MainActivity : ComponentActivity() {
     }
     private fun page(c: LinearLayout) {
         val widthDp = resources.configuration.screenWidthDp
-        val scroll = ScrollView(this).apply { fillViewport = true }
+        val scroll = ScrollView(this)
+        scroll.setFillViewport(true)
         if (widthDp >= 600) {
             val frame = FrameLayout(this)
             val contentWidth = dp(minOf(1040, widthDp - 40))
             frame.addView(c, FrameLayout.LayoutParams(contentWidth, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
-            scroll.addView(frame, ScrollView.LayoutParams(-1, -2))
+            scroll.addView(frame, FrameLayout.LayoutParams(-1, -2))
         } else {
-            scroll.addView(c, ScrollView.LayoutParams(-1, -2))
+            scroll.addView(c, FrameLayout.LayoutParams(-1, -2))
         }
         setContentView(scroll)
     }
