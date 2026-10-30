@@ -37,6 +37,8 @@ class MainActivity : ComponentActivity() {
     private val prefs by lazy { getSharedPreferences("private_gallery", Context.MODE_PRIVATE) }
     private var folder = "root"
     private var viewingFullscreenImage = false
+    private var fullscreenImages: List<Item> = emptyList()
+    private var fullscreenImageIndex: Int = -1
     private var listMode = false
     private var selectionMode = false
     private val selectedItemIds = linkedSetOf<String>()
@@ -70,7 +72,10 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onBackPressed() {
-        if (viewingFullscreenImage) {
+        if (selectionMode) {
+            clearSelection()
+            home()
+        } else if (viewingFullscreenImage) {
             viewingFullscreenImage = false
             window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
             window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
@@ -690,6 +695,41 @@ class MainActivity : ComponentActivity() {
     }
 
     @Suppress("DEPRECATION")
+    private fun showFullscreenImage() {
+        val current = fullscreenImages.getOrNull(fullscreenImageIndex) ?: return
+        val file = File(filesDir, current.path)
+        val image = ImageView(this).apply {
+            setBackgroundColor(Color.BLACK)
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            setImageBitmap(BitmapFactory.decodeFile(file.absolutePath))
+            contentDescription = current.name
+            setOnLongClickListener { showFullscreenDownloadMenu(current); true }
+            setOnTouchListener(object : View.OnTouchListener {
+                private var downX = 0f
+                private var downY = 0f
+                override fun onTouch(v: View, event: android.view.MotionEvent): Boolean {
+                    when (event.action) {
+                        android.view.MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; return true }
+                        android.view.MotionEvent.ACTION_UP -> {
+                            val dx = event.x - downX
+                            val dy = event.y - downY
+                            if (kotlin.math.abs(dx) > dp(60) && kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
+                                val next = if (dx < 0) fullscreenImageIndex + 1 else fullscreenImageIndex - 1
+                                if (next in fullscreenImages.indices) {
+                                    fullscreenImageIndex = next
+                                    showFullscreenImage()
+                                }
+                            } else performClick()
+                            return true
+                        }
+                    }
+                    return true
+                }
+            })
+        }
+        setContentView(image)
+    }
+
     private fun openItem(item: Item) {
         val file = File(filesDir, item.path)
         if (!file.exists()) { toast("文件不存在"); return }
@@ -706,13 +746,11 @@ class MainActivity : ComponentActivity() {
         } else if (item.mime.startsWith("image/")) {
             viewingFullscreenImage = true
             window.setFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN, android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
-            window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY)
-            val image = ImageView(this).apply {
-                setBackgroundColor(Color.BLACK); scaleType = ImageView.ScaleType.FIT_CENTER
-                setImageBitmap(BitmapFactory.decodeFile(file.absolutePath)); contentDescription = item.name
-            }
-            image.setOnLongClickListener { showFullscreenDownloadMenu(item); true }
-            setContentView(image)
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN
+            fullscreenImages = items().filter { it.mime.startsWith("image/") && it.folder == item.folder }.sortedByDescending { it.time }
+            fullscreenImageIndex = fullscreenImages.indexOfFirst { it.id == item.id }.coerceAtLeast(0)
+            showFullscreenImage()
+            
         } else {
             viewingFullscreenImage = false
             window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
@@ -770,7 +808,13 @@ class MainActivity : ComponentActivity() {
 
     private fun documentListRow(item: Item): View {
         val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 14) }
-        row.addView(text(if (item.mime == "application/pdf") "▤" else if (item.mime.startsWith("image/")) "▧" else if (item.mime.startsWith("video/")) "▶" else "▣", 25f, blue, true), LinearLayout.LayoutParams(dp(44), dp(44)))
+        val thumb = ImageView(this).apply {
+            scaleType = ImageView.ScaleType.CENTER_CROP
+            val f = File(filesDir, item.path)
+            if (item.mime.startsWith("image/")) setImageBitmap(BitmapFactory.decodeFile(f.absolutePath))
+            else setImageDrawable(ColorDrawable(0xFFE8EFFA.toInt()))
+        }
+        row.addView(thumb, LinearLayout.LayoutParams(dp(48), dp(48)).apply { rightMargin = dp(10) })
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         info.addView(text(item.name, 14f, ink, true)); info.addView(text(item.mime, 11f, muted))
         row.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
