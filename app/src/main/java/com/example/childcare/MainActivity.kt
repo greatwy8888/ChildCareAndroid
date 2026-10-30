@@ -6,6 +6,7 @@ import android.content.ContentValues
 import android.content.pm.PackageManager
 import android.content.Context
 import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
 import android.graphics.Color
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
@@ -434,37 +435,83 @@ class MainActivity : ComponentActivity() {
         return LinearLayout(this).apply { setPadding(0, 0, 0, dp(8)); addView(row) }
     }
 
+    private fun documentIcon(item: Item, compact: Boolean = false): View {
+        val ext = item.name.substringAfterLast('.', "").lowercase()
+        val spec = when {
+            item.mime == "application/pdf" || ext == "pdf" -> Triple("PDF", "PDF", 0xFFE53935.toInt())
+            ext in listOf("txt", "log") || item.mime == "text/plain" -> Triple("≡", "TXT", 0xFF2696E8.toInt())
+            ext in listOf("html", "htm") || item.mime == "text/html" -> Triple("</>", "HTML", 0xFFFF8500.toInt())
+            ext == "php" -> Triple("<?", "PHP", 0xFF5969D8.toInt())
+            ext in listOf("doc", "docx") -> Triple("W", "WORD", 0xFF1769D2.toInt())
+            ext in listOf("xls", "xlsx", "csv") -> Triple("X", "EXCEL", 0xFF159B58.toInt())
+            ext in listOf("ppt", "pptx") -> Triple("P", "PPT", 0xFFE66B28.toInt())
+            ext == "json" -> Triple("{ }", "JSON", 0xFF7650D8.toInt())
+            ext == "css" -> Triple("{ }", "CSS", 0xFF0878D1.toInt())
+            ext in listOf("js", "mjs") -> Triple("</>", "JS", 0xFF159B58.toInt())
+            ext in listOf("md", "markdown") -> Triple("M↓", "MD", 0xFF46515F.toInt())
+            ext in listOf("zip", "rar", "7z", "gz", "tar") -> Triple("▤", ext.uppercase(), 0xFF2678D8.toInt())
+            else -> Triple("▤", ext.uppercase().ifBlank { "FILE" }.take(5), 0xFF718096.toInt())
+        }
+        return LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            setBackgroundColor(0xFFEAF0F8.toInt())
+            addView(text(spec.first, if (compact) 22f else 34f, spec.third, true).apply { gravity = Gravity.CENTER })
+            addView(text(spec.second, if (compact) 9f else 11f, Color.WHITE, true).apply {
+                gravity = Gravity.CENTER
+                background = bg(spec.third, 4)
+                setPadding(dp(5), dp(2), dp(5), dp(2))
+            })
+        }
+    }
+
+    private fun loadVideoFrame(file: File): android.graphics.Bitmap? {
+        val retriever = MediaMetadataRetriever()
+        return try {
+            retriever.setDataSource(file.absolutePath)
+            retriever.getFrameAtTime(1_000_000, MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+        } catch (_: Exception) {
+            try { retriever.getFrameAtTime() } catch (_: Exception) { null }
+        } finally {
+            try { retriever.release() } catch (_: Exception) { }
+        }
+    }
+
     private fun thumbnailTile(item: Item): View {
         val file = File(filesDir, item.path)
         val frame = FrameLayout(this).apply {
             background = bg(Color.WHITE, 14); clipToOutline = true; elevation = dp(1).toFloat()
         }
-        val image = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            if (item.mime.startsWith("image/")) {
+        if (item.mime.startsWith("image/")) {
+            val image = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
                 try {
                     val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
                     BitmapFactory.decodeFile(file.absolutePath, bounds)
                     val opts = BitmapFactory.Options()
-                    opts.inSampleSize = maxOf(1, minOf(bounds.outWidth / 300, bounds.outHeight / 300))
+                    opts.inSampleSize = maxOf(1, minOf(maxOf(1, bounds.outWidth / 300), maxOf(1, bounds.outHeight / 300)))
                     setImageBitmap(BitmapFactory.decodeFile(file.absolutePath, opts))
                 } catch (_: Exception) { setImageDrawable(ColorDrawable(0xFFE5ECF7.toInt())) }
-            } else {
-                setBackgroundColor(0xFFE8EFFA.toInt())
-                setImageDrawable(null)
             }
-        }
-        frame.addView(image, FrameLayout.LayoutParams(-1, -1))
-        if (!item.mime.startsWith("image/") && !item.mime.startsWith("video/")) {
-            val doc = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setBackgroundColor(0xFFE8EFFA.toInt()) }
-            val ext = item.name.substringAfterLast('.', "FILE").uppercase().take(5)
-            doc.addView(text(if (item.mime == "application/pdf") "▤" else "▧", 34f, blue, true).apply { gravity = Gravity.CENTER })
-            doc.addView(text(ext, 12f, ink, true).apply { gravity = Gravity.CENTER })
-            frame.addView(doc, FrameLayout.LayoutParams(-1, -1))
+            frame.addView(image, FrameLayout.LayoutParams(-1, -1))
+        } else if (item.mime.startsWith("video/")) {
+            val videoThumb = ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setImageBitmap(loadVideoFrame(file))
+                if (drawable == null) setBackgroundColor(0xFF26364D.toInt())
+            }
+            frame.addView(videoThumb, FrameLayout.LayoutParams(-1, -1))
+            val play = TextView(this).apply {
+                text = "▶"; textSize = 19f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+                background = bg(0x99000000.toInt(), 24)
+            }
+            frame.addView(play, FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER))
+        } else {
+            frame.addView(documentIcon(item), FrameLayout.LayoutParams(-1, -1))
         }
         if (item.mime.startsWith("video/")) {
             val badge = TextView(this).apply {
-                text = "▶ 视频"; textSize = 11f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+                text = "视频"; textSize = 11f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
                 background = bg(0x99000000.toInt(), 9); setPadding(dp(7), dp(4), dp(7), dp(4))
             }
             frame.addView(badge, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.START).apply { setMargins(dp(6), 0, 0, dp(6)) })
@@ -836,11 +883,25 @@ class MainActivity : ComponentActivity() {
 
     private fun documentListRow(item: Item): View {
         val row = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; setPadding(dp(12), dp(10), dp(12), dp(10)); background = bg(Color.WHITE, 14) }
-        val thumb = ImageView(this).apply {
-            scaleType = ImageView.ScaleType.CENTER_CROP
-            val f = File(filesDir, item.path)
-            if (item.mime.startsWith("image/")) setImageBitmap(BitmapFactory.decodeFile(f.absolutePath))
-            else setImageDrawable(ColorDrawable(0xFFE8EFFA.toInt()))
+        val f = File(filesDir, item.path)
+        val thumb: View = when {
+            item.mime.startsWith("image/") -> ImageView(this).apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                setImageBitmap(BitmapFactory.decodeFile(f.absolutePath))
+            }
+            item.mime.startsWith("video/") -> FrameLayout(this).apply {
+                val preview = ImageView(this@MainActivity).apply {
+                    scaleType = ImageView.ScaleType.CENTER_CROP
+                    setImageBitmap(loadVideoFrame(f))
+                    if (drawable == null) setBackgroundColor(0xFF26364D.toInt())
+                }
+                addView(preview, FrameLayout.LayoutParams(-1, -1))
+                addView(TextView(this@MainActivity).apply {
+                    text = "▶"; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+                    background = bg(0x99000000.toInt(), 20)
+                }, FrameLayout.LayoutParams(dp(25), dp(25), Gravity.CENTER))
+            }
+            else -> documentIcon(item, true)
         }
         row.addView(thumb, LinearLayout.LayoutParams(dp(48), dp(48)).apply { rightMargin = dp(10) })
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
