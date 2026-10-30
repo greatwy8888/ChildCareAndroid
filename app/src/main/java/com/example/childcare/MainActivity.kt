@@ -121,9 +121,42 @@ class MainActivity : ComponentActivity() {
         setPadding(dp(14), dp(8), dp(14), dp(8))
     }
     private fun page(c: LinearLayout) {
-        val scroll = ScrollView(this)
-        scroll.addView(c)
+        val widthDp = resources.configuration.screenWidthDp
+        val scroll = ScrollView(this).apply { fillViewport = true }
+        if (widthDp >= 600) {
+            val frame = FrameLayout(this)
+            val contentWidth = dp(minOf(1040, widthDp - 40))
+            frame.addView(c, FrameLayout.LayoutParams(contentWidth, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
+            scroll.addView(frame, ScrollView.LayoutParams(-1, -2))
+        } else {
+            scroll.addView(c, ScrollView.LayoutParams(-1, -2))
+        }
         setContentView(scroll)
+    }
+    private fun mediaColumns(): Int {
+        val width = resources.configuration.screenWidthDp
+        return when {
+            width >= 1000 -> 6
+            width >= 720 -> 5
+            else -> 3
+        }
+    }
+    private fun folderColumns(): Int = if (resources.configuration.screenWidthDp >= 720) 3 else 2
+    private fun selectionActions(onDone: () -> Unit): LinearLayout {
+        return LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            orientation = LinearLayout.HORIZONTAL
+            val compact = { label: String, action: () -> Unit ->
+                btn(label, action = action).apply {
+                    setPadding(dp(8), dp(9), dp(8), dp(9))
+                    textSize = 13f
+                }
+            }
+            addView(compact("下载(" + selectedItemIds.size + ")") { downloadSelectedItems() }, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(5) })
+            addView(compact("移动(" + selectedItemIds.size + ")") { moveSelectedItems() }, LinearLayout.LayoutParams(0, -2, 1f).apply { rightMargin = dp(5) })
+            addView(compact("删除") { deleteSelectedItems() }, LinearLayout.LayoutParams(0, -2, 0.8f).apply { rightMargin = dp(5) })
+            addView(compact("取消") { clearSelection(); onDone() }, LinearLayout.LayoutParams(0, -2, 0.8f))
+        }
     }
     private fun col() = LinearLayout(this).apply {
         orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(22), dp(20), dp(24)); setBackgroundColor(pale)
@@ -267,7 +300,7 @@ class MainActivity : ComponentActivity() {
             emptyFolder.addView(et, LinearLayout.LayoutParams(0, -2, 1f))
             emptyFolder.setOnClickListener { createFolder() }; c.addView(emptyFolder)
         } else {
-            val fg = GridLayout(this).apply { columnCount = 2 }
+            val fg = GridLayout(this).apply { columnCount = folderColumns() }
             fm.entries.forEachIndexed { index, entry ->
                 val count = all.count { it.folder == entry.key }
                 val card = LinearLayout(this).apply {
@@ -291,14 +324,11 @@ class MainActivity : ComponentActivity() {
             fileHeader.addView(btn("‹ 返回") { folder = "root"; home() })
             fileHeader.addView(btn("⌂ 首页") { folder = "root"; home() })
         }
-        fileHeader.addView(btn(if (listMode) "▦ 缩略图" else "☷ 文件列表") { listMode = !listMode; home() })
-        if (selectionMode && selectedItemIds.isNotEmpty()) {
-            fileHeader.addView(btn("下载(${selectedItemIds.size})") { downloadSelectedItems() })
-            fileHeader.addView(btn("移动(${selectedItemIds.size})") { moveSelectedItems() })
-            fileHeader.addView(btn("删除") { deleteSelectedItems() })
-            fileHeader.addView(btn("取消") { clearSelection(); home() })
-        }
+        fileHeader.addView(btn(if (listMode) "▦ 缩略图" else "☷ 列表") { listMode = !listMode; home() })
         c.addView(fileHeader); gap(c, 10)
+        if (selectionMode && selectedItemIds.isNotEmpty()) {
+            c.addView(selectionActions { home() }); gap(c, 8)
+        }
         if (visible.isEmpty()) {
             val empty = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER; setPadding(dp(16), dp(30), dp(16), dp(30)); background = bg(Color.WHITE, 20) }
             empty.addView(text("▧", 42f, blue, true).apply { gravity = Gravity.CENTER }); gap(empty, 8)
@@ -309,7 +339,7 @@ class MainActivity : ComponentActivity() {
             if (listMode) {
                 visible.take(300).forEach { item -> c.addView(documentListRow(item)); gap(c, 6) }
             } else {
-                val grid = GridLayout(this).apply { columnCount = 3; alignmentMode = GridLayout.ALIGN_BOUNDS; useDefaultMargins = false }
+                val grid = GridLayout(this).apply { columnCount = mediaColumns(); alignmentMode = GridLayout.ALIGN_BOUNDS; useDefaultMargins = false }
                 visible.take(300).forEach { item ->
                     val lp = GridLayout.LayoutParams().apply { width = 0; height = dp(126); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); rowSpec = GridLayout.spec(GridLayout.UNDEFINED); setMargins(dp(3), dp(3), dp(3), dp(3)) }
                     grid.addView(thumbnailTile(item), lp)
@@ -363,7 +393,7 @@ class MainActivity : ComponentActivity() {
         c.addView(text("“" + query + "” · " + found.size + " 个结果", 13f, muted)); gap(c, 12)
         if (found.isEmpty()) c.addView(text("没有找到匹配的文件", 14f, muted))
         else {
-            val grid = GridLayout(this).apply { columnCount = 3 }
+            val grid = GridLayout(this).apply { columnCount = mediaColumns() }
             found.forEach { item ->
                 val lp = GridLayout.LayoutParams().apply { width = 0; height = dp(126); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); setMargins(dp(3), dp(3), dp(3), dp(3)) }
                 grid.addView(thumbnailTile(item), lp)
@@ -781,21 +811,18 @@ class MainActivity : ComponentActivity() {
         c.addView(bar); gap(c, 14)
         val actions = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         actions.addView(text(visible.size.toString() + " 个文件", 13f, muted), LinearLayout.LayoutParams(0, -2, 1f))
-        actions.addView(btn(if (listMode) "▦ 缩略图" else "☷ 文件列表") { listMode = !listMode; folderScreen(title, visible) })
+        actions.addView(btn(if (listMode) "▦ 缩略图" else "☷ 列表") { listMode = !listMode; folderScreen(title, visible) })
         actions.addView(btn("＋ 上传") { showAddMenu() })
-        if (selectionMode && selectedItemIds.isNotEmpty()) {
-            actions.addView(btn("下载(${selectedItemIds.size})") { downloadSelectedItems() })
-            actions.addView(btn("移动(${selectedItemIds.size})") { moveSelectedItems() })
-            actions.addView(btn("删除") { deleteSelectedItems() })
-            actions.addView(btn("取消") { clearSelection(); home() })
-        }
         c.addView(actions); gap(c, 10)
+        if (selectionMode && selectedItemIds.isNotEmpty()) {
+            c.addView(selectionActions { folderScreen(title, visible) }); gap(c, 8)
+        }
         if (visible.isEmpty()) {
             c.addView(text("此文件夹暂无文件", 15f, muted).apply { gravity = Gravity.CENTER })
         } else if (listMode) {
             visible.forEach { c.addView(documentListRow(it)); gap(c, 6) }
         } else {
-            val grid = GridLayout(this).apply { columnCount = 3; alignmentMode = GridLayout.ALIGN_BOUNDS; useDefaultMargins = false }
+            val grid = GridLayout(this).apply { columnCount = mediaColumns(); alignmentMode = GridLayout.ALIGN_BOUNDS; useDefaultMargins = false }
             visible.forEach { item ->
                 val lp = GridLayout.LayoutParams().apply { width = 0; height = dp(126); columnSpec = GridLayout.spec(GridLayout.UNDEFINED, 1f); rowSpec = GridLayout.spec(GridLayout.UNDEFINED); setMargins(dp(3), dp(3), dp(3), dp(3)) }
                 grid.addView(thumbnailTile(item), lp)
