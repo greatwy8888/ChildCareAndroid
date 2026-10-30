@@ -502,10 +502,13 @@ class MainActivity : ComponentActivity() {
             }
             frame.addView(videoThumb, FrameLayout.LayoutParams(-1, -1))
             val play = TextView(this).apply {
-                text = "▶"; textSize = 19f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
-                background = bg(0x99000000.toInt(), 24)
+                text = "▶"; textSize = 12f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+                background = bg(0x88000000.toInt(), 16)
+                elevation = dp(2).toFloat()
             }
-            frame.addView(play, FrameLayout.LayoutParams(dp(38), dp(38), Gravity.CENTER))
+            frame.addView(play, FrameLayout.LayoutParams(dp(26), dp(26), Gravity.BOTTOM or Gravity.END).apply {
+                setMargins(0, 0, dp(6), dp(6))
+            })
         } else {
             frame.addView(documentIcon(item), FrameLayout.LayoutParams(-1, -1))
         }
@@ -897,9 +900,12 @@ class MainActivity : ComponentActivity() {
                 }
                 addView(preview, FrameLayout.LayoutParams(-1, -1))
                 addView(TextView(this@MainActivity).apply {
-                    text = "▶"; setTextColor(Color.WHITE); gravity = Gravity.CENTER
-                    background = bg(0x99000000.toInt(), 20)
-                }, FrameLayout.LayoutParams(dp(25), dp(25), Gravity.CENTER))
+                    text = "▶"; textSize = 10f; setTextColor(Color.WHITE); gravity = Gravity.CENTER
+                    background = bg(0x88000000.toInt(), 14)
+                    elevation = dp(1).toFloat()
+                }, FrameLayout.LayoutParams(dp(19), dp(19), Gravity.BOTTOM or Gravity.END).apply {
+                    setMargins(0, 0, dp(3), dp(3))
+                })
             }
             else -> documentIcon(item, true)
         }
