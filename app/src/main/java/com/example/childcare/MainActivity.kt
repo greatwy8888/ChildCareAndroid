@@ -881,7 +881,7 @@ class MainActivity : ComponentActivity() {
         } finally {
             metadata.release()
         }
-        player.fillScreen = videoFullscreen
+        player.fitScreen = videoFullscreen
         videoView = player
         if (videoFullscreen) applyVideoOrientationForCurrentVideo()
         root.addView(player, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
