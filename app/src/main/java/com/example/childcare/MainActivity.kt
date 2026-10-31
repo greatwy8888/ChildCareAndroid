@@ -1056,7 +1056,7 @@ class MainActivity : ComponentActivity() {
         }
         applyVideoFullscreenUi(enabled)
         (videoView as? AspectRatioVideoView)?.let {
-            it.fillScreen = enabled
+            it.fitScreen = enabled
             it.requestLayout()
         }
         videoControls?.visibility = if (enabled) View.GONE else View.VISIBLE
