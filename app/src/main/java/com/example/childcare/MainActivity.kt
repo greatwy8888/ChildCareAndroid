@@ -41,6 +41,7 @@ class MainActivity : ComponentActivity() {
     private val prefs by lazy { getSharedPreferences("private_gallery", Context.MODE_PRIVATE) }
     private var folder = "root"
     private var viewingFullscreenImage = false
+    private var documentBackAction: (() -> Unit)? = null
     private var viewingVideo = false
     private var videoItems: List<Item> = emptyList()
     private var videoIndex = -1
@@ -97,7 +98,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onBackPressed() {
-        if (viewingVideo) {
+        if (documentBackAction != null) {
+            documentBackAction?.invoke()
+        } else if (viewingVideo) {
             if (videoFullscreen) setVideoFullscreen(false) else closeVideoPlayer()
         } else if (selectionMode) {
             clearSelection()
@@ -1398,7 +1401,9 @@ class MainActivity : ComponentActivity() {
             else -> "TXT"
         }
         var sourceText = try { file.readText(Charsets.UTF_8) } catch (_: Exception) { "" }
+        var savedText = sourceText
         var editing = false
+        var leaving = false
 
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1406,7 +1411,7 @@ class MainActivity : ComponentActivity() {
             setBackgroundColor(Color.WHITE)
         }
         val bar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        bar.addView(btn("‹ 返回") { home() })
+        val backButton = btn("‹ 返回") { }\n        bar.addView(backButton)
         bar.addView(text(item.name, 14f, ink, true), LinearLayout.LayoutParams(0, -2, 1f).apply {
             leftMargin = dp(6); rightMargin = dp(4)
         })
@@ -1416,7 +1421,7 @@ class MainActivity : ComponentActivity() {
         bar.addView(editButton)
         bar.addView(saveButton)
         if (isHtml) bar.addView(previewButton)
-        bar.addView(btn("⌂ 首页") { folder = "root"; home() })
+        val homeButton = btn("⌂ 首页") { }\n        bar.addView(homeButton)
         root.addView(bar)
         root.addView(text("$typeLabel · 本地文件", 11f, muted).apply {
             setPadding(dp(6), dp(5), dp(6), dp(5))
@@ -1426,6 +1431,49 @@ class MainActivity : ComponentActivity() {
         root.addView(contentHost, LinearLayout.LayoutParams(-1, 0, 1f))
 
         var editor: EditText? = null
+
+        fun saveChanges(): Boolean {
+            val newText = if (editing) editor?.text?.toString() ?: sourceText else sourceText
+            return try {
+                file.writeText(newText, Charsets.UTF_8)
+                sourceText = newText
+                savedText = newText
+                toast("已保存修改")
+                true
+            } catch (e: Exception) {
+                toast("保存失败：" + (e.message ?: "无法写入文件"))
+                false
+            }
+        }
+
+        fun leaveDocument(goHome: Boolean) {
+            leaving = true
+            documentBackAction = null
+            if (goHome) folder = "root"
+            home()
+        }
+
+        fun requestLeave(goHome: Boolean) {
+            if (leaving) return
+            val currentText = if (editing) editor?.text?.toString() ?: sourceText else sourceText
+            if (currentText == savedText) {
+                leaveDocument(goHome)
+                return
+            }
+            AlertDialog.Builder(this)
+                .setTitle("有未保存的修改")
+                .setMessage("文件内容已经修改，是否保存后再离开？")
+                .setNegativeButton("继续编辑", null)
+                .setNeutralButton("不保存") { _, _ -> leaveDocument(goHome) }
+                .setPositiveButton("保存") { _, _ ->
+                    if (saveChanges()) leaveDocument(goHome)
+                }
+                .show()
+        }
+
+        backButton.setOnClickListener { requestLeave(false) }
+        homeButton.setOnClickListener { requestLeave(true) }
+        documentBackAction = { requestLeave(false) }
 
         fun showSourceEditor() {
             contentHost.removeAllViews()
@@ -1483,15 +1531,7 @@ class MainActivity : ComponentActivity() {
 
         editButton.setOnClickListener { if (!editing) showSourceEditor() }
         saveButton.setOnClickListener {
-            val newText = editor?.text?.toString() ?: sourceText
-            try {
-                file.writeText(newText, Charsets.UTF_8)
-                sourceText = newText
-                toast("已保存修改")
-                showDocumentPreview()
-            } catch (e: Exception) {
-                toast("保存失败：" + (e.message ?: "无法写入文件"))
-            }
+            if (saveChanges()) showDocumentPreview()
         }
         previewButton.setOnClickListener {
             if (editing) {
