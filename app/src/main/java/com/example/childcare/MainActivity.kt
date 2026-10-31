@@ -1411,7 +1411,8 @@ class MainActivity : ComponentActivity() {
             setBackgroundColor(Color.WHITE)
         }
         val bar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        val backButton = btn("‹ 返回") { }\n        bar.addView(backButton)
+        val backButton = btn("‹ 返回") { }
+        bar.addView(backButton)
         bar.addView(text(item.name, 14f, ink, true), LinearLayout.LayoutParams(0, -2, 1f).apply {
             leftMargin = dp(6); rightMargin = dp(4)
         })
@@ -1421,7 +1422,8 @@ class MainActivity : ComponentActivity() {
         bar.addView(editButton)
         bar.addView(saveButton)
         if (isHtml) bar.addView(previewButton)
-        val homeButton = btn("⌂ 首页") { }\n        bar.addView(homeButton)
+        val homeButton = btn("⌂ 首页") { }
+        bar.addView(homeButton)
         root.addView(bar)
         root.addView(text("$typeLabel · 本地文件", 11f, muted).apply {
             setPadding(dp(6), dp(5), dp(6), dp(5))
