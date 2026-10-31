@@ -1154,8 +1154,9 @@ class MainActivity : ComponentActivity() {
             window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
             window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
             when {
-                item.mime == "text/plain" || item.name.endsWith(".txt", true) -> showTextDocument(item, file, false)
-                item.mime == "text/html" || item.name.endsWith(".html", true) || item.name.endsWith(".htm", true) -> showTextDocument(item, file, true)
+                item.mime == "text/plain" || item.name.endsWith(".txt", true) -> showTextDocument(item, file, "txt")
+                item.mime == "text/html" || item.name.endsWith(".html", true) || item.name.endsWith(".htm", true) -> showTextDocument(item, file, "html")
+                item.name.endsWith(".php", true) || item.mime.contains("php", true) -> showTextDocument(item, file, "php")
                 item.mime == "application/pdf" || item.name.endsWith(".pdf", true) -> showPdfDocument(file, item.name)
                 else -> {
                     val c = col()
@@ -1388,25 +1389,119 @@ class MainActivity : ComponentActivity() {
         } catch (_: Exception) { toast("PDF 打开失败"); home() }
     }
 
-    private fun showTextDocument(item: Item, file: File, html: Boolean) {
-        val c = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(12)); setBackgroundColor(Color.WHITE) }
+    private fun showTextDocument(item: Item, file: File, documentType: String) {
+        val isHtml = documentType == "html"
+        val isPhp = documentType == "php"
+        val typeLabel = when (documentType) {
+            "html" -> "HTML"
+            "php" -> "PHP 源码"
+            else -> "TXT"
+        }
+        var sourceText = try { file.readText(Charsets.UTF_8) } catch (_: Exception) { "" }
+        var editing = false
+
+        val root = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(12))
+            setBackgroundColor(Color.WHITE)
+        }
         val bar = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         bar.addView(btn("‹ 返回") { home() })
-        bar.addView(text(item.name, 15f, ink, true), LinearLayout.LayoutParams(0, -2, 1f))
+        bar.addView(text(item.name, 14f, ink, true), LinearLayout.LayoutParams(0, -2, 1f).apply {
+            leftMargin = dp(6); rightMargin = dp(4)
+        })
+        val editButton = btn("编辑") { }
+        val saveButton = btn("保存") { }
+        val previewButton = btn("预览") { }
+        bar.addView(editButton)
+        bar.addView(saveButton)
+        if (isHtml) bar.addView(previewButton)
         bar.addView(btn("⌂ 首页") { folder = "root"; home() })
-        c.addView(bar)
-        if (html) {
-            val web = WebView(this).apply {
-                setBackgroundColor(Color.WHITE); settings.javaScriptEnabled = false; webViewClient = WebViewClient()
-                loadDataWithBaseURL(null, file.readText(Charsets.UTF_8), "text/html", "UTF-8", null)
+        root.addView(bar)
+        root.addView(text("$typeLabel · 本地文件", 11f, muted).apply {
+            setPadding(dp(6), dp(5), dp(6), dp(5))
+        })
+
+        val contentHost = FrameLayout(this)
+        root.addView(contentHost, LinearLayout.LayoutParams(-1, 0, 1f))
+
+        var editor: EditText? = null
+
+        fun showSourceEditor() {
+            contentHost.removeAllViews()
+            editor = EditText(this).apply {
+                setText(sourceText)
+                textSize = 14f
+                setTextColor(Color.BLACK)
+                gravity = Gravity.TOP or Gravity.START
+                typeface = android.graphics.Typeface.MONOSPACE
+                setPadding(dp(10), dp(10), dp(10), dp(10))
+                setSingleLine(false)
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
+                    InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+                isVerticalScrollBarEnabled = true
             }
-            c.addView(web, LinearLayout.LayoutParams(-1, 0, 1f))
-        } else {
-            val body = try { file.readText(Charsets.UTF_8) } catch (_: Exception) { "无法读取此文本文件" }
-            val tv = TextView(this).apply { text = body; textSize = 16f; setTextColor(Color.BLACK); setTextIsSelectable(true); gravity = Gravity.TOP; setPadding(dp(4), dp(12), dp(4), dp(12)) }
-            val scroll = ScrollView(this); scroll.addView(tv); c.addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+            val scroll = ScrollView(this)
+            scroll.addView(editor)
+            contentHost.addView(scroll, FrameLayout.LayoutParams(-1, -1))
+            editing = true
+            editButton.visibility = View.GONE
+            saveButton.visibility = View.VISIBLE
+            previewButton.visibility = if (isHtml) View.VISIBLE else View.GONE
         }
-        setContentView(c)
+
+        fun showDocumentPreview() {
+            contentHost.removeAllViews()
+            if (isHtml) {
+                val web = WebView(this).apply {
+                    setBackgroundColor(Color.WHITE)
+                    settings.javaScriptEnabled = false
+                    settings.domStorageEnabled = false
+                    webViewClient = WebViewClient()
+                    loadDataWithBaseURL("file:///" + file.parentFile?.absolutePath.orEmpty() + "/", sourceText, "text/html", "UTF-8", null)
+                }
+                contentHost.addView(web, FrameLayout.LayoutParams(-1, -1))
+            } else {
+                val preview = TextView(this).apply {
+                    text = sourceText
+                    textSize = 15f
+                    setTextColor(Color.BLACK)
+                    gravity = Gravity.TOP or Gravity.START
+                    setTextIsSelectable(true)
+                    typeface = if (isPhp) android.graphics.Typeface.MONOSPACE else android.graphics.Typeface.DEFAULT
+                    setPadding(dp(10), dp(12), dp(10), dp(12))
+                }
+                val scroll = ScrollView(this)
+                scroll.addView(preview)
+                contentHost.addView(scroll, FrameLayout.LayoutParams(-1, -1))
+            }
+            editing = false
+            editButton.visibility = View.VISIBLE
+            saveButton.visibility = View.GONE
+            previewButton.visibility = View.GONE
+        }
+
+        editButton.setOnClickListener { if (!editing) showSourceEditor() }
+        saveButton.setOnClickListener {
+            val newText = editor?.text?.toString() ?: sourceText
+            try {
+                file.writeText(newText, Charsets.UTF_8)
+                sourceText = newText
+                toast("已保存修改")
+                showDocumentPreview()
+            } catch (e: Exception) {
+                toast("保存失败：" + (e.message ?: "无法写入文件"))
+            }
+        }
+        previewButton.setOnClickListener {
+            if (editing) {
+                sourceText = editor?.text?.toString() ?: sourceText
+                showDocumentPreview()
+            }
+        }
+
+        showDocumentPreview()
+        page(root)
     }
 
     private fun hash(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray(Charsets.UTF_8))
