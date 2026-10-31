@@ -1419,9 +1419,18 @@ class MainActivity : ComponentActivity() {
         val editButton = btn("编辑") { }
         val saveButton = btn("保存") { }
         val previewButton = btn("预览") { }
+        val undoButton = btn("↶") { }
+        val redoButton = btn("↷") { }
+        listOf(undoButton, redoButton).forEach { control ->
+            control.setPadding(dp(7), dp(10), dp(7), dp(10))
+            control.textSize = 18f
+            control.minWidth = dp(34)
+        }
         bar.addView(editButton)
         bar.addView(saveButton)
         if (isHtml) bar.addView(previewButton)
+        bar.addView(undoButton)
+        bar.addView(redoButton)
         val homeButton = btn("⌂ 首页") { }
         bar.addView(homeButton)
         root.addView(bar)
@@ -1433,6 +1442,16 @@ class MainActivity : ComponentActivity() {
         root.addView(contentHost, LinearLayout.LayoutParams(-1, 0, 1f))
 
         var editor: EditText? = null
+        val undoHistory = mutableListOf<String>()
+        val redoHistory = mutableListOf<String>()
+        var historyApplying = false
+
+        fun refreshHistoryButtons() {
+            undoButton.isEnabled = editing && undoHistory.isNotEmpty()
+            redoButton.isEnabled = editing && redoHistory.isNotEmpty()
+            undoButton.alpha = if (undoButton.isEnabled) 1f else 0.35f
+            redoButton.alpha = if (redoButton.isEnabled) 1f else 0.35f
+        }
 
         fun saveChanges(): Boolean {
             val newText = if (editing) editor?.text?.toString() ?: sourceText else sourceText
@@ -1491,6 +1510,21 @@ class MainActivity : ComponentActivity() {
                     InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
                 isVerticalScrollBarEnabled = true
             }
+            editor?.addTextChangedListener(object : android.text.TextWatcher {
+                private var previousText = ""
+                override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {
+                    previousText = s?.toString().orEmpty()
+                }
+                override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                    if (!historyApplying && previousText != s?.toString().orEmpty()) {
+                        undoHistory.add(previousText)
+                        if (undoHistory.size > 20) undoHistory.removeAt(0)
+                        redoHistory.clear()
+                        refreshHistoryButtons()
+                    }
+                }
+                override fun afterTextChanged(s: android.text.Editable?) { }
+            })
             val scroll = ScrollView(this)
             scroll.addView(editor)
             contentHost.addView(scroll, FrameLayout.LayoutParams(-1, -1))
@@ -1498,6 +1532,35 @@ class MainActivity : ComponentActivity() {
             editButton.visibility = View.GONE
             saveButton.visibility = View.VISIBLE
             previewButton.visibility = if (isHtml) View.VISIBLE else View.GONE
+            refreshHistoryButtons()
+        }
+
+        fun applyHistoryValue(target: String) {
+            val field = editor ?: return
+            historyApplying = true
+            field.setText(target)
+            field.setSelection(field.text.length)
+            historyApplying = false
+            refreshHistoryButtons()
+        }
+
+        undoButton.setOnClickListener {
+            val field = editor ?: return@setOnClickListener
+            if (undoHistory.isNotEmpty()) {
+                redoHistory.add(field.text.toString())
+                if (redoHistory.size > 20) redoHistory.removeAt(0)
+                val target = undoHistory.removeAt(undoHistory.lastIndex)
+                applyHistoryValue(target)
+            }
+        }
+        redoButton.setOnClickListener {
+            val field = editor ?: return@setOnClickListener
+            if (redoHistory.isNotEmpty()) {
+                undoHistory.add(field.text.toString())
+                if (undoHistory.size > 20) undoHistory.removeAt(0)
+                val target = redoHistory.removeAt(redoHistory.lastIndex)
+                applyHistoryValue(target)
+            }
         }
 
         fun showDocumentPreview() {
@@ -1529,6 +1592,7 @@ class MainActivity : ComponentActivity() {
             editButton.visibility = View.VISIBLE
             saveButton.visibility = View.GONE
             previewButton.visibility = View.GONE
+            refreshHistoryButtons()
         }
 
         editButton.setOnClickListener { if (!editing) showSourceEditor() }
