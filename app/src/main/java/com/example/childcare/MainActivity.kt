@@ -21,6 +21,9 @@ import android.webkit.WebViewClient
 import android.widget.GridLayout
 import android.net.Uri
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
+import android.view.MotionEvent
 import android.provider.OpenableColumns
 import android.text.InputType
 import android.view.Gravity
@@ -38,6 +41,26 @@ class MainActivity : ComponentActivity() {
     private val prefs by lazy { getSharedPreferences("private_gallery", Context.MODE_PRIVATE) }
     private var folder = "root"
     private var viewingFullscreenImage = false
+    private var viewingVideo = false
+    private var videoItems: List<Item> = emptyList()
+    private var videoIndex = -1
+    private var videoView: VideoView? = null
+    private var videoControls: LinearLayout? = null
+    private var videoSeekBar: SeekBar? = null
+    private var videoFullscreen = false
+    private var playPauseTextHolder: TextView? = null
+    private val videoHandler = Handler(Looper.getMainLooper())
+    private val videoProgressTask = object : Runnable {
+        override fun run() {
+            val player = videoView
+            val bar = videoSeekBar
+            if (viewingVideo && player != null && bar != null) {
+                if (!bar.isPressed && player.duration > 0) { bar.max = player.duration; bar.progress = player.currentPosition }
+                videoHandler.postDelayed(this, 400)
+            }
+        }
+    }
+    private val hideVideoControlsTask = Runnable { if (videoFullscreen) videoControls?.visibility = View.GONE }
     private var fullscreenImages: List<Item> = emptyList()
     private var fullscreenImageIndex: Int = -1
     private var listMode = false
@@ -73,7 +96,9 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onBackPressed() {
-        if (selectionMode) {
+        if (viewingVideo) {
+            if (videoFullscreen) setVideoFullscreen(false) else closeVideoPlayer()
+        } else if (selectionMode) {
             clearSelection()
             home()
         } else if (viewingFullscreenImage) {
@@ -89,6 +114,12 @@ class MainActivity : ComponentActivity() {
                 .setNegativeButton("继续使用", null)
                 .setPositiveButton("退出") { _, _ -> finish() }.show()
         }
+    }
+
+    override fun onDestroy() {
+        videoHandler.removeCallbacksAndMessages(null)
+        videoView?.stopPlayback()
+        super.onDestroy()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -811,19 +842,173 @@ class MainActivity : ComponentActivity() {
         setContentView(image)
     }
 
+
+    @Suppress("DEPRECATION")
+    private fun openVideoPlayer(item: Item) {
+        viewingFullscreenImage = false
+        viewingVideo = true
+        videoFullscreen = false
+        videoItems = items().filter { it.mime.startsWith("video/") && it.folder == item.folder }.sortedByDescending { it.time }
+        videoIndex = videoItems.indexOfFirst { it.id == item.id }.coerceAtLeast(0)
+        buildVideoPlayer()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun buildVideoPlayer() {
+        val current = videoItems.getOrNull(videoIndex) ?: run { closeVideoPlayer(); return }
+        val file = File(filesDir, current.path)
+        val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
+        val player = VideoView(this)
+        videoView = player
+        root.addView(player, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
+
+        val overlay = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(8), dp(12), dp(10))
+            background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(0xCC101820.toInt(), 0x99101820.toInt(), 0x00101820))
+        }
+        videoControls = overlay
+        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        top.addView(videoControlButton("‹ 上一段") { switchVideo(-1) }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(5) })
+        top.addView(videoControlButton("下一段 ›") { switchVideo(1) }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(5) })
+        top.addView(videoControlButton("退出") { closeVideoPlayer() }, LinearLayout.LayoutParams(dp(64), dp(42)))
+        overlay.addView(top)
+        overlay.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
+
+        val bottom = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(7), dp(10), dp(7))
+            background = bg(0xDD172638.toInt(), 13)
+        }
+        bottom.addView(text(current.name, 13f, Color.WHITE, true))
+        val seek = SeekBar(this).apply {
+            max = 1000
+            progressTintList = android.content.res.ColorStateList.valueOf(Color.rgb(55, 170, 255))
+            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFFB7C5D8.toInt())
+            thumbTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+        }
+        videoSeekBar = seek
+        bottom.addView(seek, LinearLayout.LayoutParams(-1, dp(34)))
+        val actions = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
+        val playButton = videoControlButton("Ⅱ 暂停") {
+            val vv = videoView ?: return@videoControlButton
+            if (vv.isPlaying) { vv.pause(); playPauseTextHolder?.text = "▶ 播放" }
+            else { vv.start(); playPauseTextHolder?.text = "Ⅱ 暂停" }
+        }
+        playPauseTextHolder = playButton
+        actions.addView(playButton, LinearLayout.LayoutParams(0, dp(40), 1f).apply { rightMargin = dp(6) })
+        actions.addView(videoControlButton("⛶ 全屏") { setVideoFullscreen(true) }, LinearLayout.LayoutParams(0, dp(40), 1f))
+        bottom.addView(actions)
+        overlay.addView(bottom)
+        root.addView(overlay, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
+
+        player.setVideoURI(Uri.fromFile(file))
+        player.setOnPreparedListener { mp ->
+            mp.isLooping = false
+            player.start()
+            seek.max = player.duration.coerceAtLeast(1)
+            videoHandler.removeCallbacks(videoProgressTask)
+            videoHandler.post(videoProgressTask)
+        }
+        player.setOnCompletionListener {
+            if (videoIndex < videoItems.lastIndex) switchVideo(1)
+            else playPauseTextHolder?.text = "▶ 重播"
+        }
+        seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) { if (fromUser) videoView?.seekTo(progress) }
+            override fun onStartTrackingTouch(bar: SeekBar?) { videoHandler.removeCallbacks(hideVideoControlsTask) }
+            override fun onStopTrackingTouch(bar: SeekBar?) { scheduleHideVideoControls() }
+        })
+        var downX = 0f
+        var downY = 0f
+        player.setOnTouchListener { _, event ->
+            when (event.action) {
+                MotionEvent.ACTION_DOWN -> { downX = event.x; downY = event.y; true }
+                MotionEvent.ACTION_UP -> {
+                    val dx = event.x - downX
+                    val dy = event.y - downY
+                    if (kotlin.math.abs(dx) > dp(65) && kotlin.math.abs(dx) > kotlin.math.abs(dy) * 1.25f) {
+                        if (dx < 0) switchVideo(1) else switchVideo(-1)
+                    } else toggleVideoControls()
+                    true
+                }
+                else -> true
+            }
+        }
+        setContentView(root)
+        if (videoFullscreen) applyVideoFullscreenUi(true)
+        scheduleHideVideoControls()
+    }
+
+    private fun videoControlButton(label: String, action: () -> Unit): TextView =
+        TextView(this).apply {
+            text = label; textSize = 13f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
+            background = bg(0xCC263B52.toInt(), 10)
+            setPadding(dp(8), dp(6), dp(8), dp(6))
+            setOnClickListener { action() }
+        }
+
+    private fun switchVideo(delta: Int) {
+        val next = videoIndex + delta
+        if (next !in videoItems.indices) { toast(if (delta < 0) "已经是第一段视频" else "已经是最后一段视频"); return }
+        videoHandler.removeCallbacks(videoProgressTask)
+        videoIndex = next
+        buildVideoPlayer()
+    }
+
+    private fun toggleVideoControls() {
+        val controls = videoControls ?: return
+        if (controls.visibility == View.VISIBLE) {
+            videoHandler.removeCallbacks(hideVideoControlsTask)
+            controls.visibility = View.GONE
+        } else {
+            controls.visibility = View.VISIBLE
+            scheduleHideVideoControls()
+        }
+    }
+
+    private fun scheduleHideVideoControls() {
+        videoHandler.removeCallbacks(hideVideoControlsTask)
+        if (videoFullscreen) videoHandler.postDelayed(hideVideoControlsTask, 3000)
+    }
+
+    @Suppress("DEPRECATION")
+    private fun setVideoFullscreen(enabled: Boolean) {
+        videoFullscreen = enabled
+        applyVideoFullscreenUi(enabled)
+        videoControls?.visibility = if (enabled) View.GONE else View.VISIBLE
+        if (!enabled) videoHandler.removeCallbacks(hideVideoControlsTask) else scheduleHideVideoControls()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun applyVideoFullscreenUi(enabled: Boolean) {
+        if (enabled) {
+            window.setFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN, android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            window.decorView.systemUiVisibility = (View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or
+                View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY or View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN or
+                View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_LAYOUT_STABLE)
+        } else {
+            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
+            window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
+        }
+    }
+
+    private fun closeVideoPlayer() {
+        videoHandler.removeCallbacks(videoProgressTask)
+        videoHandler.removeCallbacks(hideVideoControlsTask)
+        videoView?.stopPlayback()
+        videoView = null; videoControls = null; videoSeekBar = null; playPauseTextHolder = null
+        viewingVideo = false; videoFullscreen = false
+        applyVideoFullscreenUi(false)
+        home()
+    }
+
     private fun openItem(item: Item) {
         val file = File(filesDir, item.path)
         if (!file.exists()) { toast("文件不存在"); return }
         if (item.mime.startsWith("video/")) {
-            viewingFullscreenImage = false
-            window.clearFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
-            val root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.BLACK) }
-            val v = VideoView(this)
-            v.setVideoURI(Uri.fromFile(file)); v.setMediaController(MediaController(this))
-            root.addView(v, LinearLayout.LayoutParams(-1, -1))
-            root.setOnLongClickListener { showFullscreenDownloadMenu(item); true }
-            v.setOnPreparedListener { v.start() }
-            setContentView(root)
+            openVideoPlayer(item)
         } else if (item.mime.startsWith("image/")) {
             viewingFullscreenImage = true
             window.setFlags(android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN, android.view.WindowManager.LayoutParams.FLAG_FULLSCREEN)
