@@ -8,6 +8,10 @@ import android.content.Context
 import android.graphics.BitmapFactory
 import android.media.MediaMetadataRetriever
 import android.graphics.Color
+import android.graphics.RectF
+import android.graphics.Path
+import android.graphics.Paint
+import android.graphics.Canvas
 import android.graphics.Typeface
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.GradientDrawable
@@ -175,8 +179,8 @@ class MainActivity : ComponentActivity() {
             // The home navigation is a sibling of the scrolling content, anchored to the
             // bottom of the app window so it remains visible while the page scrolls.
             val root = FrameLayout(this).apply { setBackgroundColor(pale) }
-            val navHeight = dp(66)
-            val navBottomMargin = dp(8)
+            val navHeight = dp(58)
+            val navBottomMargin = dp(4)
             root.addView(scroll, FrameLayout.LayoutParams(-1, -1).apply {
                 bottomMargin = navHeight + navBottomMargin
             })
@@ -407,10 +411,10 @@ class MainActivity : ComponentActivity() {
         val nav = LinearLayout(this).apply {
             gravity = Gravity.CENTER_VERTICAL
             background = bg(Color.WHITE, 18)
-            setPadding(dp(6), dp(6), dp(6), dp(6))
+            setPadding(dp(6), dp(2), dp(6), dp(2))
             elevation = dp(8).toFloat()
         }
-        nav.addView(navItem("▦", "相册", true) { folder = "root"; home() }, LinearLayout.LayoutParams(0, dp(54), 1f))
+        nav.addView(navItem("▦", "相册", true) { folder = "root"; home() }, LinearLayout.LayoutParams(0, dp(52), 1f))
         nav.addView(navItem("▣", "文件夹", false) { createFolder() }, LinearLayout.LayoutParams(0, dp(54), 1f))
         nav.addView(navItem("◉", "发现", false) { showDiscovery() }, LinearLayout.LayoutParams(0, dp(54), 1f))
         nav.addView(navItem("●", "我的", false) { settings() }, LinearLayout.LayoutParams(0, dp(54), 1f))
@@ -428,16 +432,56 @@ class MainActivity : ComponentActivity() {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             background = if (selected) bg(0xFFEAF2FF.toInt(), 12) else ColorDrawable(Color.TRANSPARENT)
-            // Give every navigation icon the same fixed viewport and typography.
-            addView(TextView(this@MainActivity).apply {
-                text = symbol
-                textSize = 20f
-                typeface = Typeface.DEFAULT_BOLD
-                includeFontPadding = false
-                gravity = Gravity.CENTER
-                setTextColor(if (selected) blue else muted)
-            }, LinearLayout.LayoutParams(dp(28), dp(26)))
-            addView(text(label, 11f, if (selected) blue else muted, selected).apply {
+            // All four symbols are drawn in the same 24dp coordinate space, avoiding
+            // font-glyph optical size differences between Unicode characters.
+            val iconColor = if (selected) blue else muted
+            val icon = object : View(this@MainActivity) {
+                private val p = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                    color = iconColor
+                    style = Paint.Style.STROKE
+                    strokeWidth = 1.8f
+                    strokeCap = Paint.Cap.ROUND
+                    strokeJoin = Paint.Join.ROUND
+                }
+                override fun onDraw(canvas: Canvas) {
+                    super.onDraw(canvas)
+                    val save = canvas.save()
+                    canvas.scale(width / 24f, height / 24f)
+                    when (label) {
+                        "相册" -> {
+                            canvas.drawRoundRect(RectF(3f, 3f, 21f, 21f), 2.5f, 2.5f, p)
+                            canvas.drawLine(12f, 3f, 12f, 21f, p)
+                            canvas.drawLine(3f, 12f, 21f, 12f, p)
+                        }
+                        "文件夹" -> {
+                            val path = Path().apply {
+                                moveTo(2.5f, 7f); lineTo(9.5f, 7f); lineTo(11.5f, 9.5f)
+                                lineTo(21.5f, 9.5f); lineTo(21.5f, 19f)
+                                quadTo(21.5f, 21f, 19.5f, 21f); lineTo(4.5f, 21f)
+                                quadTo(2.5f, 21f, 2.5f, 19f); close()
+                            }
+                            canvas.drawPath(path, p)
+                            canvas.drawLine(2.5f, 7f, 2.5f, 5f, p)
+                            canvas.drawLine(2.5f, 5f, 9f, 5f, p)
+                        }
+                        "发现" -> {
+                            canvas.drawCircle(12f, 12f, 9f, p)
+                            val needle = Path().apply {
+                                moveTo(15.8f, 8.2f); lineTo(13.2f, 13.2f); lineTo(8.2f, 15.8f)
+                                lineTo(10.8f, 10.8f); close()
+                            }
+                            canvas.drawPath(needle, p)
+                        }
+                        else -> {
+                            canvas.drawCircle(12f, 8f, 3.5f, p)
+                            canvas.drawArc(RectF(4f, 14f, 20f, 24f), 180f, 180f, false, p)
+                        }
+                    }
+                    canvas.restoreToCount(save)
+                }
+            }
+            addView(icon, LinearLayout.LayoutParams(dp(22), dp(22)))
+            addView(text(label, 11f, iconColor, selected).apply {
                 gravity = Gravity.CENTER
                 includeFontPadding = false
             })
