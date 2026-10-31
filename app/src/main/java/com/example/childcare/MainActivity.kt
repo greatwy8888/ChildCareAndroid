@@ -156,7 +156,7 @@ class MainActivity : ComponentActivity() {
         if (transparent) { setTextColor(Color.WHITE); setHintTextColor(0xDDFFFFFF.toInt()) }
         setPadding(dp(14), dp(8), dp(14), dp(8))
     }
-    private fun page(c: LinearLayout) {
+    private fun page(c: LinearLayout, bottomNav: View? = null) {
         val widthDp = resources.configuration.screenWidthDp
         val scroll = ScrollView(this)
         scroll.setFillViewport(true)
@@ -168,7 +168,24 @@ class MainActivity : ComponentActivity() {
         } else {
             scroll.addView(c, FrameLayout.LayoutParams(-1, -2))
         }
-        setContentView(scroll)
+        if (bottomNav == null) {
+            setContentView(scroll)
+        } else {
+            // The home navigation is a sibling of the scrolling content, anchored to the
+            // bottom of the app window so it remains visible while the page scrolls.
+            val root = FrameLayout(this).apply { setBackgroundColor(pale) }
+            val navHeight = dp(66)
+            val navBottomMargin = dp(8)
+            root.addView(scroll, FrameLayout.LayoutParams(-1, -1).apply {
+                bottomMargin = navHeight + navBottomMargin
+            })
+            root.addView(bottomNav, FrameLayout.LayoutParams(-1, navHeight, Gravity.BOTTOM).apply {
+                leftMargin = dp(14)
+                rightMargin = dp(14)
+                bottomMargin = navBottomMargin
+            })
+            setContentView(root)
+        }
     }
     private fun mediaColumns(): Int {
         val width = resources.configuration.screenWidthDp
@@ -386,12 +403,17 @@ class MainActivity : ComponentActivity() {
             if (visible.size > 300) { gap(c, 8); c.addView(text("显示最近 300 个文件，共 " + visible.size + " 个", 12f, muted)) }
         }
         gap(c, 18)
-        val nav = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL; background = bg(Color.WHITE, 18); setPadding(dp(6), dp(7), dp(6), dp(7)) }
+        val nav = LinearLayout(this).apply {
+            gravity = Gravity.CENTER_VERTICAL
+            background = bg(Color.WHITE, 18)
+            setPadding(dp(6), dp(6), dp(6), dp(6))
+            elevation = dp(8).toFloat()
+        }
         nav.addView(navItem("▦", "相册", true) { folder = "root"; home() }, LinearLayout.LayoutParams(0, dp(54), 1f))
         nav.addView(navItem("▣", "文件夹", false) { createFolder() }, LinearLayout.LayoutParams(0, dp(54), 1f))
         nav.addView(navItem("◉", "发现", false) { showDiscovery() }, LinearLayout.LayoutParams(0, dp(54), 1f))
         nav.addView(navItem("●", "我的", false) { settings() }, LinearLayout.LayoutParams(0, dp(54), 1f))
-        c.addView(nav); page(c)
+        page(c, nav)
     }
 
     private fun summaryCell(symbol: String, number: String, label: String): View {
@@ -402,10 +424,22 @@ class MainActivity : ComponentActivity() {
 
     private fun navItem(symbol: String, label: String, selected: Boolean, action: () -> Unit): View =
         LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
             background = if (selected) bg(0xFFEAF2FF.toInt(), 12) else ColorDrawable(Color.TRANSPARENT)
-            addView(text(symbol, 19f, if (selected) blue else muted, true).apply { gravity = Gravity.CENTER })
-            addView(text(label, 11f, if (selected) blue else muted, selected).apply { gravity = Gravity.CENTER })
+            // Give every navigation icon the same fixed viewport and typography.
+            addView(TextView(this@MainActivity).apply {
+                text = symbol
+                textSize = 20f
+                typeface = Typeface.DEFAULT_BOLD
+                includeFontPadding = false
+                gravity = Gravity.CENTER
+                setTextColor(if (selected) blue else muted)
+            }, LinearLayout.LayoutParams(dp(28), dp(26)))
+            addView(text(label, 11f, if (selected) blue else muted, selected).apply {
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+            })
             setOnClickListener { action() }
         }
 
