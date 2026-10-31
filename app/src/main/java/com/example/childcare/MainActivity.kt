@@ -992,26 +992,28 @@ class MainActivity : ComponentActivity() {
         }
 
     private inner class AspectRatioVideoView(context: Context) : VideoView(context) {
-        var fillScreen: Boolean = false
+        var fitScreen: Boolean = false
         var sourceVideoWidth: Int = 0
         var sourceVideoHeight: Int = 0
         override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
-            if (!fillScreen || sourceVideoWidth <= 0 || sourceVideoHeight <= 0) return
+            if (!fitScreen || sourceVideoWidth <= 0 || sourceVideoHeight <= 0) {
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+                return
+            }
             val availableWidth = MeasureSpec.getSize(widthMeasureSpec)
             val availableHeight = MeasureSpec.getSize(heightMeasureSpec)
-            if (availableWidth <= 0 || availableHeight <= 0) return
-            val videoRatio = sourceVideoWidth.toFloat() / sourceVideoHeight.toFloat()
-            val screenRatio = availableWidth.toFloat() / availableHeight.toFloat()
-            val targetWidth: Int
-            val targetHeight: Int
-            if (videoRatio > screenRatio) {
-                targetHeight = availableHeight
-                targetWidth = (availableHeight * videoRatio).toInt()
-            } else {
-                targetWidth = availableWidth
-                targetHeight = (availableWidth / videoRatio).toInt()
+            if (availableWidth <= 0 || availableHeight <= 0) {
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+                return
             }
+            // Fit the entire video inside the screen: never crop or distort.
+            // Letterbox/pillarbox space is intentional when aspect ratios differ.
+            val scale = minOf(
+                availableWidth.toFloat() / sourceVideoWidth.toFloat(),
+                availableHeight.toFloat() / sourceVideoHeight.toFloat()
+            )
+            val targetWidth = (sourceVideoWidth * scale).toInt().coerceAtLeast(1)
+            val targetHeight = (sourceVideoHeight * scale).toInt().coerceAtLeast(1)
             setMeasuredDimension(targetWidth, targetHeight)
         }
     }
