@@ -857,50 +857,66 @@ class MainActivity : ComponentActivity() {
     private fun buildVideoPlayer() {
         val current = videoItems.getOrNull(videoIndex) ?: run { closeVideoPlayer(); return }
         val file = File(filesDir, current.path)
-        val root = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
-        val player = VideoView(this)
+        val root = FrameLayout(this).apply {
+            setBackgroundColor(Color.BLACK)
+            clipChildren = true
+            clipToPadding = true
+        }
+        val player = AspectRatioVideoView(this)
+        player.fillScreen = videoFullscreen
         videoView = player
         root.addView(player, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
 
         val overlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(10))
+            setPadding(dp(12), dp(8), dp(12), dp(12))
             background = GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM,
-                intArrayOf(0xCC101820.toInt(), 0x99101820.toInt(), 0x00101820))
+                intArrayOf(0x00101820, 0xAA101820.toInt(), 0xEE101820.toInt()))
         }
         videoControls = overlay
-        val top = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        top.addView(videoControlButton("‹ 上一段") { switchVideo(-1) }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(5) })
-        top.addView(videoControlButton("下一段 ›") { switchVideo(1) }, LinearLayout.LayoutParams(0, dp(42), 1f).apply { rightMargin = dp(5) })
-        top.addView(videoControlButton("退出") { closeVideoPlayer() }, LinearLayout.LayoutParams(dp(64), dp(42)))
-        overlay.addView(top)
-        overlay.addView(View(this), LinearLayout.LayoutParams(1, 0, 1f))
 
-        val bottom = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(10), dp(7), dp(10), dp(7))
-            background = bg(0xDD172638.toInt(), 13)
-        }
-        bottom.addView(text(current.name, 13f, Color.WHITE, true))
+        // 进度条独立放在最上方，所有操作按钮统一排列在进度条下方。
         val seek = SeekBar(this).apply {
             max = 1000
-            progressTintList = android.content.res.ColorStateList.valueOf(Color.rgb(55, 170, 255))
-            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFFB7C5D8.toInt())
+            progressTintList = android.content.res.ColorStateList.valueOf(Color.rgb(45, 174, 255))
+            progressBackgroundTintList = android.content.res.ColorStateList.valueOf(0xFFE1E8F0.toInt())
             thumbTintList = android.content.res.ColorStateList.valueOf(Color.WHITE)
+            minimumHeight = dp(34)
         }
         videoSeekBar = seek
-        bottom.addView(seek, LinearLayout.LayoutParams(-1, dp(34)))
-        val actions = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
-        val playButton = videoControlButton("Ⅱ 暂停") {
-            val vv = videoView ?: return@videoControlButton
-            if (vv.isPlaying) { vv.pause(); playPauseTextHolder?.text = "▶ 播放" }
-            else { vv.start(); playPauseTextHolder?.text = "Ⅱ 暂停" }
+        overlay.addView(seek, LinearLayout.LayoutParams(-1, dp(42)))
+
+        val actions = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            setPadding(0, dp(3), 0, 0)
+        }
+        actions.addView(videoIconButton("⏮", 25f) { switchVideo(-1) },
+            LinearLayout.LayoutParams(0, dp(48), 1f))
+        val playButton = videoIconButton("Ⅱ", 25f) {
+            val vv = videoView ?: return@videoIconButton
+            if (vv.isPlaying) {
+                vv.pause()
+                playPauseTextHolder?.text = "▶"
+            } else {
+                vv.start()
+                playPauseTextHolder?.text = "Ⅱ"
+            }
         }
         playPauseTextHolder = playButton
-        actions.addView(playButton, LinearLayout.LayoutParams(0, dp(40), 1f).apply { rightMargin = dp(6) })
-        actions.addView(videoControlButton("⛶ 全屏") { setVideoFullscreen(true) }, LinearLayout.LayoutParams(0, dp(40), 1f))
-        bottom.addView(actions)
-        overlay.addView(bottom)
+        actions.addView(playButton, LinearLayout.LayoutParams(0, dp(48), 1f))
+        actions.addView(videoIconButton("■", 23f) {
+            videoView?.pause()
+            videoView?.seekTo(0)
+            playPauseTextHolder?.text = "▶"
+        }, LinearLayout.LayoutParams(0, dp(48), 1f))
+        actions.addView(videoIconButton("⏭", 25f) { switchVideo(1) },
+            LinearLayout.LayoutParams(0, dp(48), 1f))
+        actions.addView(videoIconButton("⛶", 27f) { setVideoFullscreen(true) },
+            LinearLayout.LayoutParams(0, dp(48), 1f))
+        actions.addView(videoIconButton("×", 31f) { closeVideoPlayer() },
+            LinearLayout.LayoutParams(0, dp(48), 1f))
+        overlay.addView(actions)
         root.addView(overlay, FrameLayout.LayoutParams(-1, -2, Gravity.BOTTOM))
 
         player.setVideoURI(Uri.fromFile(file))
@@ -913,10 +929,12 @@ class MainActivity : ComponentActivity() {
         }
         player.setOnCompletionListener {
             if (videoIndex < videoItems.lastIndex) switchVideo(1)
-            else playPauseTextHolder?.text = "▶ 重播"
+            else playPauseTextHolder?.text = "▶"
         }
         seek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) { if (fromUser) videoView?.seekTo(progress) }
+            override fun onProgressChanged(bar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) videoView?.seekTo(progress)
+            }
             override fun onStartTrackingTouch(bar: SeekBar?) { videoHandler.removeCallbacks(hideVideoControlsTask) }
             override fun onStopTrackingTouch(bar: SeekBar?) { scheduleHideVideoControls() }
         })
@@ -941,13 +959,38 @@ class MainActivity : ComponentActivity() {
         scheduleHideVideoControls()
     }
 
-    private fun videoControlButton(label: String, action: () -> Unit): TextView =
+    private fun videoIconButton(symbol: String, size: Float, action: () -> Unit): TextView =
         TextView(this).apply {
-            text = label; textSize = 13f; gravity = Gravity.CENTER; setTextColor(Color.WHITE)
-            background = bg(0xCC263B52.toInt(), 10)
-            setPadding(dp(8), dp(6), dp(8), dp(6))
+            text = symbol
+            textSize = size
+            gravity = Gravity.CENTER
+            setTextColor(Color.WHITE)
+            background = ColorDrawable(Color.TRANSPARENT)
+            setPadding(dp(5), dp(3), dp(5), dp(3))
+            isClickable = true
+            isFocusable = true
             setOnClickListener { action() }
         }
+
+    private inner class AspectRatioVideoView(context: Context) : VideoView(context) {
+        var fillScreen: Boolean = false
+        override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+            if (!fillScreen || videoWidth <= 0 || videoHeight <= 0) {
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+                return
+            }
+            val availableWidth = MeasureSpec.getSize(widthMeasureSpec)
+            val availableHeight = MeasureSpec.getSize(heightMeasureSpec)
+            val scale = maxOf(
+                availableWidth.toFloat() / videoWidth.toFloat(),
+                availableHeight.toFloat() / videoHeight.toFloat()
+            )
+            setMeasuredDimension(
+                (videoWidth * scale).toInt().coerceAtLeast(availableWidth),
+                (videoHeight * scale).toInt().coerceAtLeast(availableHeight)
+            )
+        }
+    }
 
     private fun switchVideo(delta: Int) {
         val next = videoIndex + delta
@@ -977,6 +1020,10 @@ class MainActivity : ComponentActivity() {
     private fun setVideoFullscreen(enabled: Boolean) {
         videoFullscreen = enabled
         applyVideoFullscreenUi(enabled)
+        (videoView as? AspectRatioVideoView)?.let {
+            it.fillScreen = enabled
+            it.requestLayout()
+        }
         videoControls?.visibility = if (enabled) View.GONE else View.VISIBLE
         if (!enabled) videoHandler.removeCallbacks(hideVideoControlsTask) else scheduleHideVideoControls()
     }
