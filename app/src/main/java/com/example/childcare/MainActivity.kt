@@ -48,6 +48,7 @@ class MainActivity : ComponentActivity() {
     private var videoControls: LinearLayout? = null
     private var videoSeekBar: SeekBar? = null
     private var videoFullscreen = false
+    private var previousRequestedOrientation: Int? = null
     private var playPauseTextHolder: TextView? = null
     private val videoHandler = Handler(Looper.getMainLooper())
     private val videoProgressTask = object : Runnable {
@@ -866,8 +867,14 @@ class MainActivity : ComponentActivity() {
         val metadata = MediaMetadataRetriever()
         try {
             metadata.setDataSource(file.absolutePath)
-            player.sourceVideoWidth = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
-            player.sourceVideoHeight = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            var sourceWidth = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+            var sourceHeight = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+            val rotation = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+            if (rotation == 90 || rotation == 270) {
+                val swap = sourceWidth; sourceWidth = sourceHeight; sourceHeight = swap
+            }
+            player.sourceVideoWidth = sourceWidth
+            player.sourceVideoHeight = sourceHeight
         } catch (_: Exception) {
             player.sourceVideoWidth = 0
             player.sourceVideoHeight = 0
@@ -876,6 +883,7 @@ class MainActivity : ComponentActivity() {
         }
         player.fillScreen = videoFullscreen
         videoView = player
+        if (videoFullscreen) applyVideoOrientationForCurrentVideo()
         root.addView(player, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
 
         val overlay = LinearLayout(this).apply {
@@ -1034,7 +1042,16 @@ class MainActivity : ComponentActivity() {
 
     @Suppress("DEPRECATION")
     private fun setVideoFullscreen(enabled: Boolean) {
+        if (enabled && !videoFullscreen && previousRequestedOrientation == null) {
+            previousRequestedOrientation = requestedOrientation
+        }
         videoFullscreen = enabled
+        if (enabled) {
+            applyVideoOrientationForCurrentVideo()
+        } else {
+            previousRequestedOrientation?.let { requestedOrientation = it }
+            previousRequestedOrientation = null
+        }
         applyVideoFullscreenUi(enabled)
         (videoView as? AspectRatioVideoView)?.let {
             it.fillScreen = enabled
@@ -1042,6 +1059,17 @@ class MainActivity : ComponentActivity() {
         }
         videoControls?.visibility = if (enabled) View.GONE else View.VISIBLE
         if (!enabled) videoHandler.removeCallbacks(hideVideoControlsTask) else scheduleHideVideoControls()
+    }
+
+    @Suppress("DEPRECATION")
+    private fun applyVideoOrientationForCurrentVideo() {
+        val player = videoView as? AspectRatioVideoView ?: return
+        if (player.sourceVideoWidth <= 0 || player.sourceVideoHeight <= 0) return
+        requestedOrientation = if (player.sourceVideoWidth >= player.sourceVideoHeight) {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        } else {
+            android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+        }
     }
 
     @Suppress("DEPRECATION")
@@ -1062,7 +1090,12 @@ class MainActivity : ComponentActivity() {
         videoHandler.removeCallbacks(hideVideoControlsTask)
         videoView?.stopPlayback()
         videoView = null; videoControls = null; videoSeekBar = null; playPauseTextHolder = null
-        viewingVideo = false; videoFullscreen = false
+        viewingVideo = false
+        if (videoFullscreen) setVideoFullscreen(false) else {
+            previousRequestedOrientation?.let { requestedOrientation = it }
+            previousRequestedOrientation = null
+        }
+        videoFullscreen = false
         applyVideoFullscreenUi(false)
         home()
     }
