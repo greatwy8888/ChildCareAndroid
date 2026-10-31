@@ -1543,7 +1543,8 @@ class MainActivity : ComponentActivity() {
         }
 
         showDocumentPreview()
-        page(root)
+        // Keep the document toolbar fixed; only contentHost scrolls.
+        setContentView(root)
     }
 
     private fun hash(s: String) = MessageDigest.getInstance("SHA-256").digest(s.toByteArray(Charsets.UTF_8))
