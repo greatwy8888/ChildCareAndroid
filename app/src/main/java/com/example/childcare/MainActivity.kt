@@ -1442,6 +1442,7 @@ class MainActivity : ComponentActivity() {
         root.addView(contentHost, LinearLayout.LayoutParams(-1, 0, 1f))
 
         var editor: EditText? = null
+        var editorScroll: ScrollView? = null
         val undoHistory = mutableListOf<String>()
         val redoHistory = mutableListOf<String>()
         var historyApplying = false
@@ -1526,6 +1527,7 @@ class MainActivity : ComponentActivity() {
                 override fun afterTextChanged(s: android.text.Editable?) { }
             })
             val scroll = ScrollView(this)
+            editorScroll = scroll
             scroll.addView(editor)
             contentHost.addView(scroll, FrameLayout.LayoutParams(-1, -1))
             editing = true
@@ -1537,10 +1539,21 @@ class MainActivity : ComponentActivity() {
 
         fun applyHistoryValue(target: String) {
             val field = editor ?: return
+            // Preserve the user's exact caret/selection and both editor scroll offsets.
+            val selectionStart = field.selectionStart.coerceAtLeast(0)
+            val selectionEnd = field.selectionEnd.coerceAtLeast(0)
+            val editorScrollY = field.scrollY
+            val containerScrollY = editorScroll?.scrollY ?: 0
             historyApplying = true
             field.setText(target)
-            field.setSelection(field.text.length)
+            val textLength = field.text.length
+            field.setSelection(selectionStart.coerceAtMost(textLength), selectionEnd.coerceAtMost(textLength))
             historyApplying = false
+            // setText() may reset the EditText's internal scroll; restore after layout.
+            field.post {
+                field.scrollTo(0, editorScrollY)
+                editorScroll?.scrollTo(0, containerScrollY)
+            }
             refreshHistoryButtons()
         }
 
@@ -1597,7 +1610,19 @@ class MainActivity : ComponentActivity() {
 
         editButton.setOnClickListener { if (!editing) showSourceEditor() }
         saveButton.setOnClickListener {
-            if (saveChanges()) showDocumentPreview()
+            val currentText = editor?.text?.toString() ?: sourceText
+            if (currentText == savedText) {
+                toast("内容没有变化")
+            } else {
+                AlertDialog.Builder(this)
+                    .setTitle("确认保存")
+                    .setMessage("确定保存对当前文件所做的修改吗？")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("确认保存") { _, _ ->
+                        if (saveChanges()) showDocumentPreview()
+                    }
+                    .show()
+            }
         }
         previewButton.setOnClickListener {
             if (editing) {
