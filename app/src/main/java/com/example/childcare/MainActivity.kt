@@ -863,6 +863,17 @@ class MainActivity : ComponentActivity() {
             clipToPadding = true
         }
         val player = AspectRatioVideoView(this)
+        val metadata = MediaMetadataRetriever()
+        try {
+            metadata.setDataSource(file.absolutePath)
+            player.sourceVideoWidth = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+            player.sourceVideoHeight = metadata.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+        } catch (_: Exception) {
+            player.sourceVideoWidth = 0
+            player.sourceVideoHeight = 0
+        } finally {
+            metadata.release()
+        }
         player.fillScreen = videoFullscreen
         videoView = player
         root.addView(player, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
@@ -912,7 +923,7 @@ class MainActivity : ComponentActivity() {
         }, LinearLayout.LayoutParams(0, dp(48), 1f))
         actions.addView(videoIconButton("⏭", 25f) { switchVideo(1) },
             LinearLayout.LayoutParams(0, dp(48), 1f))
-        actions.addView(videoIconButton("⛶", 27f) { setVideoFullscreen(true) },
+        actions.addView(videoIconButton(if (videoFullscreen) "⛶" else "⛶", 27f) { setVideoFullscreen(!videoFullscreen) },
             LinearLayout.LayoutParams(0, dp(48), 1f))
         actions.addView(videoIconButton("×", 31f) { closeVideoPlayer() },
             LinearLayout.LayoutParams(0, dp(48), 1f))
@@ -974,21 +985,26 @@ class MainActivity : ComponentActivity() {
 
     private inner class AspectRatioVideoView(context: Context) : VideoView(context) {
         var fillScreen: Boolean = false
+        var sourceVideoWidth: Int = 0
+        var sourceVideoHeight: Int = 0
         override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-            if (!fillScreen || videoWidth <= 0 || videoHeight <= 0) {
-                super.onMeasure(widthMeasureSpec, heightMeasureSpec)
-                return
-            }
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec)
+            if (!fillScreen || sourceVideoWidth <= 0 || sourceVideoHeight <= 0) return
             val availableWidth = MeasureSpec.getSize(widthMeasureSpec)
             val availableHeight = MeasureSpec.getSize(heightMeasureSpec)
-            val scale = maxOf(
-                availableWidth.toFloat() / videoWidth.toFloat(),
-                availableHeight.toFloat() / videoHeight.toFloat()
-            )
-            setMeasuredDimension(
-                (videoWidth * scale).toInt().coerceAtLeast(availableWidth),
-                (videoHeight * scale).toInt().coerceAtLeast(availableHeight)
-            )
+            if (availableWidth <= 0 || availableHeight <= 0) return
+            val videoRatio = sourceVideoWidth.toFloat() / sourceVideoHeight.toFloat()
+            val screenRatio = availableWidth.toFloat() / availableHeight.toFloat()
+            val targetWidth: Int
+            val targetHeight: Int
+            if (videoRatio > screenRatio) {
+                targetHeight = availableHeight
+                targetWidth = (availableHeight * videoRatio).toInt()
+            } else {
+                targetWidth = availableWidth
+                targetHeight = (availableWidth / videoRatio).toInt()
+            }
+            setMeasuredDimension(targetWidth, targetHeight)
         }
     }
 
