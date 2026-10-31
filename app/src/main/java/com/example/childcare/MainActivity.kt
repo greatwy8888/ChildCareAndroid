@@ -407,8 +407,18 @@ class MainActivity : ComponentActivity() {
         }
 
     private fun showAddMenu() {
-        AlertDialog.Builder(this).setTitle("添加内容").setItems(arrayOf("导入照片 / 视频", "导入 PDF / TXT / HTML 等文档", "新建文件夹")) { _, which ->
-            when (which) { 0 -> importer.launch(arrayOf("image/*", "video/*")); 1 -> importer.launch(arrayOf("application/pdf", "text/plain", "text/html", "application/*", "text/*")); else -> createFolder() }
+        AlertDialog.Builder(this).setTitle("添加内容").setItems(arrayOf(
+            "导入照片 / 视频",
+            "导入 PDF / TXT / HTML 等文档",
+            "上传其他文件（任意格式）",
+            "新建文件夹"
+        )) { _, which ->
+            when (which) {
+                0 -> importer.launch(arrayOf("image/*", "video/*"))
+                1 -> importer.launch(arrayOf("application/pdf", "text/plain", "text/html", "application/*", "text/*"))
+                2 -> importer.launch(arrayOf("*/*"))
+                else -> createFolder()
+            }
         }.show()
     }
 
@@ -485,15 +495,25 @@ class MainActivity : ComponentActivity() {
             else -> Triple("▤", ext.uppercase().ifBlank { "FILE" }.take(5), 0xFF718096.toInt())
         }
         return LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; gravity = Gravity.CENTER
-            setPadding(dp(4), dp(4), dp(4), dp(4))
+            orientation = LinearLayout.VERTICAL
+            gravity = Gravity.CENTER
+            setPadding(if (compact) 0 else dp(4), if (compact) 0 else dp(4), if (compact) 0 else dp(4), if (compact) 0 else dp(4))
             setBackgroundColor(0xFFEAF0F8.toInt())
-            addView(text(spec.first, if (compact) 22f else 34f, spec.third, true).apply { gravity = Gravity.CENTER })
-            addView(text(spec.second, if (compact) 9f else 11f, Color.WHITE, true).apply {
+            addView(text(spec.first, if (compact) 18f else 34f, spec.third, true).apply {
                 gravity = Gravity.CENTER
+                includeFontPadding = false
+                maxLines = 1
+                isSingleLine = true
+                if (compact) setPadding(0, 0, 0, 0)
+            }, LinearLayout.LayoutParams(-1, 0, if (compact) 1f else 1.25f))
+            addView(text(spec.second, if (compact) 8f else 11f, Color.WHITE, true).apply {
+                gravity = Gravity.CENTER
+                includeFontPadding = false
+                maxLines = 1
+                isSingleLine = true
                 background = bg(spec.third, 4)
-                setPadding(dp(5), dp(2), dp(5), dp(2))
-            })
+                setPadding(dp(if (compact) 3 else 5), dp(if (compact) 1 else 2), dp(if (compact) 3 else 5), dp(if (compact) 1 else 2))
+            }, LinearLayout.LayoutParams(-1, 0, if (compact) 0.65f else 0.75f))
         }
     }
 
@@ -601,15 +621,29 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun createFolder() {
-        val input = field("文件夹名称")
-        AlertDialog.Builder(this).setTitle("新建文件夹").setView(input).setNegativeButton("取消", null)
+        val input = field("文件夹名称").apply {
+            isFocusableInTouchMode = true
+            requestFocus()
+            setSelection(0)
+        }
+        val dialog = AlertDialog.Builder(this).setTitle("新建文件夹").setView(input).setNegativeButton("取消", null)
             .setPositiveButton("创建") { _, _ ->
                 val name = input.text.toString().trim()
                 if (name.isBlank()) { toast("请输入名称"); return@setPositiveButton }
                 val map = folders()
                 if (map.values.any { it.equals(name, true) }) { toast("名称已存在"); return@setPositiveButton }
                 map[UUID.randomUUID().toString()] = name; saveFolders(map); home()
-            }.show()
+            }.create()
+        dialog.setOnShowListener {
+            input.requestFocus()
+            input.setSelection(0)
+            input.post {
+                input.setSelection(0)
+                (getSystemService(Context.INPUT_METHOD_SERVICE) as android.view.inputmethod.InputMethodManager)
+                    .showSoftInput(input, android.view.inputmethod.InputMethodManager.SHOW_IMPLICIT)
+            }
+        }
+        dialog.show()
     }
 
     private fun multiDeleteFolders() {
@@ -1192,7 +1226,7 @@ class MainActivity : ComponentActivity() {
             }
             else -> documentIcon(item, true)
         }
-        row.addView(thumb, LinearLayout.LayoutParams(dp(48), dp(48)).apply { rightMargin = dp(10) })
+        row.addView(thumb, LinearLayout.LayoutParams(dp(54), dp(54)).apply { rightMargin = dp(10) })
         val info = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         info.addView(text(item.name, 14f, ink, true)); info.addView(text(item.mime, 11f, muted))
         row.addView(info, LinearLayout.LayoutParams(0, -2, 1f))
