@@ -280,13 +280,13 @@ private fun showSettingsDialog(onClosed: (() -> Unit)? = null) {
             .create()
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener {
-    dialog.dismiss()
-    showSettingsDialog {
-        if (locked) {
-            showPasswordPrompt()
-        }
-    }
-}
+                showSettingsPasswordPrompt {
+                    dialog.dismiss()
+                    showSettingsDialog {
+                        if (locked) showPasswordPrompt()
+                    }
+                }
+            }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val entered = input.text.toString()
                 if (entered.length != 6 || !entered.all { it in '0'..'9' } || !verifyTotp(entered)) {
@@ -295,6 +295,42 @@ private fun showSettingsDialog(onClosed: (() -> Unit)? = null) {
                 }
                 dialog.dismiss()
                 unlockForDuration()
+            }
+        }
+        dialog.show()
+    }
+
+    /**
+     * Settings are protected by the same TOTP check as unlocking.
+     * The existing lock screen remains visible until verification succeeds.
+     */
+    private fun showSettingsPasswordPrompt(onVerified: () -> Unit) {
+        val input = EditText(this).apply {
+            hint = "输入 6 位动态密码"
+            inputType = InputType.TYPE_CLASS_NUMBER
+            setSingleLine(true)
+            filters = arrayOf(InputFilter.LengthFilter(6))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("家长验证")
+            .setMessage("进入设置前，请输入 Google Authenticator 动态密码。")
+            .setView(input)
+            .setNegativeButton("取消", null)
+            .setPositiveButton("验证", null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val entered = input.text.toString()
+                if (entered.length != 6 ||
+                    !entered.all { it in '0'..'9' } ||
+                    !verifyTotp(entered)
+                ) {
+                    input.error = "动态密码错误或已过期"
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                onVerified()
             }
         }
         dialog.show()
